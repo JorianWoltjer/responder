@@ -30,13 +30,26 @@ If you have any other questions, feel free to ask in an [Issue](https://github.c
 > [!WARNING]  
 > Because this tool is hosted on my own domain, I will technically be able to view any traffic going to and from my server. Keep this in mind when creating PoC's for real-world scenarios and consider self-hosting it on a server you control.
 
-Build and run the repository like this (optionally configure the listening port in [`docker-compose.yml`](docker-compose.yml#L5)):
+The docker image is updated at [docker.io/j0r1an/responder](https://hub.docker.com/r/j0r1an/responder), and can be **run** using the following command:
+
+```bash
+docker run --rm -p 8000:80 j0r1an/responder:latest
+```
+
+<!-- Push:
+docker build -t j0r1an/responder:latest .
+docker push j0r1an/responder:latest
+ -->
+
+---
+
+If you instead want to **build from source code** yourself, clone this Github repository (optionally configure the listening port in [`docker-compose.yml`](docker-compose.yml#L5)), then run the following command:
 
 ```bash
 docker compose up --build -d
 ```
 
-Then visit http://localhost:8000. Since the main use case is making it publicly accessible your site, it is recommended to put this behind a reverse proxy like the following Nginx configuration:
+The application will be available on http://localhost:8000. Since the main use case is making it publicly accessible your site, it is recommended to put this behind a **reverse proxy** like the following Nginx configuration:
 
 ```conf
 server {
