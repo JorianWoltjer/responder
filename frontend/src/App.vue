@@ -45,10 +45,18 @@ const handleMount = (editor) => {
   emmetCSS(window.monaco)
 
   editorRef.value = editor
-  editor.onKeyDown((e) => {
-    if (e.ctrlKey && e.code === 'KeyS') {
-      e.preventDefault()
-      formatCode()
+  window.monaco.editor.addKeybindingRule({
+    keybinding: window.monaco.KeyMod.CtrlCmd | window.monaco.KeyCode.KeyS,
+    command: 'editor.action.formatDocument',
+    when: 'textInputFocus'
+  })
+  editor.addAction({
+    id: 'open-url',
+    label: 'Open URL',
+    keybindings: [window.monaco.KeyMod.CtrlCmd | window.monaco.KeyCode.Enter],
+    precondition: 'textInputFocus',
+    run: () => {
+      open(url.value)
     }
   })
 
@@ -72,10 +80,6 @@ const handleMount = (editor) => {
       })
     }
   }
-}
-
-function formatCode() {
-  editorRef.value?.getAction('editor.action.formatDocument').run()
 }
 
 function changeLanguage() {
@@ -151,9 +155,15 @@ function showRandomTip() {
   })
 }
 
-addEventListener('beforeunload', (event) => {
-  event.preventDefault()
-})
+addEventListener(
+  'keydown',
+  () => {
+    addEventListener('beforeunload', (event) => {
+      event.preventDefault()
+    })
+  },
+  { once: true }
+)
 </script>
 
 <template>

@@ -21,25 +21,32 @@ With Responder, you have a super quick **web UI** that generates a permanent URL
 
 1. **How can I shorten the URL?**: If your target supports it, you could simply redirect/rewrite from your short domain to a crafted URL on this tool. Otherwise, you can always fall back to a simple page yourself like with PHP.
 2. **How do I see exactly what headers my response is giving?**: Send a request to the url with `curl -D - 'https://r.jtw.sh/...'`, or use a proxy like Burp Suite to view the raw traffic.
+3. **What's the best way to test same-site/cross-origin features?**: Same-site rules by the browser are applied across subdomains, so just point another subdomain like https://r2.jtw.sh to the same IP. For a whole other domain, you can put a trailing `.` after your domain and it will resolve to the same server, while being seen as a different site completely, like <https://r.jtw.sh.>.
 
 If you have any other questions, feel free to ask in an [Issue](https://github.com/JorianWoltjer/responder/issues).
 
 ## Privacy & Self-Hosting
 
 > [!WARNING]  
-> Because this tool is hosted on my own domain, I will be able to view any traffic going to and from my server. Keep this in mind when creating PoC's for real-world scenarios and consider self-hosting it on a server you control.
+> Because this tool is hosted on my own domain, I will technically be able to view any traffic going to and from my server. Keep this in mind when creating PoC's for real-world scenarios and consider self-hosting it on a server you control.
 
-Build and run the repository like this:
+Build and run the repository like this (optionally configure the listening port in [`docker-compose.yml`](docker-compose.yml#L5)):
 
 ```bash
-cd frontend/
-npm i
-npm run build
-
-cd ../
-cargo build --release
-
-./target/release/responder
+docker compose up --build -d
 ```
 
-**Be careful on which domain you run this tool**. The domain must not host any other applications that rely only on SameSite for CSRF protection ([read more](https://book.jorianwoltjer.com/web/cross-site-request-forgery-csrf)). This application is vulnerable to XSS by design, so it may be abused to send same-site requests with authentication.
+Then visit http://localhost:8000. Since the main use case is making it publicly accessible your site, it is recommended to put this behind a reverse proxy like the following Nginx configuration:
+
+```conf
+server {
+    listen 80;
+    server_name r.jtw.sh r2.jtw.sh *.r.jtw.sh;
+
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+    }
+}
+```
+
+**Be careful on which domain you publicly host this tool**. The domain must not host any other applications that rely only on SameSite for CSRF protection ([read more](https://book.jorianwoltjer.com/web/cross-site-request-forgery-csrf)). This application is vulnerable to XSS by design, so it may be abused to send same-site requests with authentication.

@@ -4,49 +4,73 @@ export const CORS_HEADERS = {
   'Access-Control-Allow-Headers': '*',
 };
 
+// https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers
 export const HTTP_HEADERS = [
   "Content-Type",
   "Location",
-  "Cache-Control",
-  "Server",
+  "Set-Cookie",
+  "Content-Security-Policy",
+  "Permissions-Policy",
+  "Referrer-Policy",
   "X-Frame-Options",
   "Content-Disposition",
-  "Content-Security-Policy",
-  "Content-Encoding",
-  "Set-Cookie",
-  ...Object.keys(CORS_HEADERS)
+  ...Object.keys(CORS_HEADERS),
+  "Access-Control-Allow-Credentials",
+  "Access-Control-Expose-Headers",
+  "Cross-Origin-Embedder-Policy",
+  "Cross-Origin-Opener-Policy",
+  "Cross-Origin-Resource-Policy",
+  "NEL",
+  "Link",
+  "Refresh",
+  "Cache-Control",
+  "Timing-Allow-Origin",
+  "Report-To",
+  "Reporting-Endpoints",
+  "Clear-Site-Data",
+  "Service-Worker-Allowed",
+  "Origin-Agent-Cluster"
 ]
 
+// https://code.visualstudio.com/docs/editing/userdefinedsnippets
 export const SNIPPETS = {
   "html": {
     "!csrf": {
       "description": "Create a Cross-Site Request Forgery template",
       "code": `<form id="form" action="https://\${1:example.com/endpoint}" method="POST">
-\t<input type="hidden" name="\${2:name}" value="\${3:value}">$0
-\t<button type="submit">Submit</button>
+  <input type="hidden" name="\${2:name}" value="\${3:value}">$0
+  <button type="submit">Submit</button>
 </form>
 <script>
-\tform.submit()
+  form.submit()
 </script>`
     },
     "!name-xss": {
       "description": "Create a window.name redirect XSS template",
       "code": `<script>
-\tname = "alert(document.domain)"
-\tlocation = "https://\${1:example.com/?payload=eval(name)}"$0
+  name = "alert(document.domain)"
+  location = "https://\${1:example.com/?payload=eval(name)}"$0
 </script>`
     },
+    "onclick": {
+      "description": "<script> tag with onclick= event handler",
+      "code": `<script>
+  onclick = () => {
+    $0
+  }
+</script>`
+    }
   },
   "json": {
     "!proto": {
       "description": "Insert a __proto__ and prototype.constructor property",
       "code": `"__proto__": {
-\t"$1": $2
+  "$1": $2
 },
 "constructor": {
-\t"prototype": {
-\t\t"$1": $2
-\t}
+  "prototype": {
+    "$1": $2
+  }
 }$0`
     }
   },
@@ -70,8 +94,8 @@ export const SNIPPETS = {
     "!poc": {
       "description": "visual Proof of Concept: color everything red/blue",
       "code": `* {
-\tcolor: red !important;
-\tbackground-color: blue !important;
+  color: red !important;
+  background-color: blue !important;
 }`
     }
   }

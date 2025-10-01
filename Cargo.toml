@@ -8,7 +8,6 @@ edition = "2021"
 [dependencies]
 axum = { version = "0.7.9", features = ["macros"] }
 b64 = "0.4.0"
-dotenvy = "0.15.7"
 lazy_static = "1.5.0"
 mime_guess = "2.0.5"
 regex = "1.11.1"
