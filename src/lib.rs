@@ -3,6 +3,7 @@ use std::error;
 use axum::{
     body::Bytes,
     extract::Request,
+    http::StatusCode,
     response::{Html, IntoResponse},
 };
 use regex::Regex;
@@ -15,7 +16,7 @@ type Err = Box<dyn error::Error>;
 const GIST_ID_REGEX: &str = r"(^|\W)([a-f0-9]{32})(\W|$)";
 const GIST_FILE_REGEX: &str = r"(\/([^/]+)$)";
 
-pub async fn index(request: Request) -> Result<axum::response::Response, String> {
+pub async fn index(request: Request) -> Result<axum::response::Response, StatusCode> {
     let path = request.uri().path().to_string();
     let query_string = request.uri().query().unwrap_or_default();
 
@@ -33,7 +34,8 @@ pub async fn index(request: Request) -> Result<axum::response::Response, String>
             _ => {}
         }
     }
-    let mut response: Response = serde_qs::from_str(query_string).map_err(|e| e.to_string())?;
+    let mut response: Response =
+        serde_qs::from_str(query_string).map_err(|_| StatusCode::BAD_REQUEST)?;
     response.path.replace(path);
 
     Ok(response.into_response().await)
@@ -76,4 +78,21 @@ pub async fn get_gist_content(url: &str) -> Result<(Vec<u8>, Option<String>), Er
         .and_then(|t| t.as_str().map(|s| s.to_string()));
 
     Ok((content.as_bytes().to_vec(), content_type))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn invalid_query_returns_bad_request() {
+        let request = Request::builder()
+            .uri("/?delay=abc")
+            .body(axum::body::Body::empty())
+            .unwrap();
+
+        let response = index(request).await.unwrap_err();
+
+        assert_eq!(response, StatusCode::BAD_REQUEST);
+    }
 }

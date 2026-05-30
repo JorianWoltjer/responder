@@ -1,4 +1,4 @@
-use std::{collections::HashMap, str::FromStr};
+use std::{collections::HashMap, str::FromStr, time::Instant};
 
 use axum::{
     http::{HeaderName, HeaderValue, StatusCode},
@@ -7,6 +7,7 @@ use axum::{
 use b64::FromBase64;
 use lazy_static::lazy_static;
 use serde::{Deserialize, Deserializer, Serialize};
+use tokio::time::{sleep, Duration};
 
 use crate::{get_gist_content, Err};
 
@@ -29,6 +30,8 @@ pub struct Response {
     pub headers: HashMap<String, String>,
     #[serde(default, deserialize_with = "deserialize_bool")]
     pub cors: bool,
+    #[serde(default)]
+    pub delay: u64,
     #[serde(skip)]
     pub path: Option<String>,
 }
@@ -76,6 +79,7 @@ impl Response {
     }
 
     async fn try_into_response(self) -> Result<axum::response::Response, Err> {
+        let started_at = Instant::now();
         let mut response = axum::response::Response::builder().status(self.status);
 
         let (body, content_type) = self.get_body().await?;
@@ -104,6 +108,12 @@ impl Response {
             headers.insert("Access-Control-Allow-Origin", any.clone());
             headers.insert("Access-Control-Allow-Methods", any.clone());
             headers.insert("Access-Control-Allow-Headers", any);
+        }
+
+        let elapsed = started_at.elapsed();
+        let requested_delay = Duration::from_millis(self.delay);
+        if elapsed < requested_delay {
+            sleep(requested_delay - elapsed).await;
         }
 
         Ok(response.body(body.into())?)
@@ -232,5 +242,37 @@ mod tests {
 
         assert_eq!(response.body_b64, Some("SGVsbG8sIHdvcmxkIQ=".to_string()));
         assert_eq!(response.get_body().await.unwrap().0, b"Hello, world!");
+    }
+
+    #[test]
+    fn deserialize_delay() {
+        let query_string = "delay=250";
+
+        let response: Response = serde_qs::from_str(query_string).unwrap();
+
+        assert_eq!(response.delay, 250);
+    }
+
+    #[test]
+    fn deserialize_default_delay() {
+        let response: Response = serde_qs::from_str("").unwrap();
+
+        assert_eq!(response.delay, 0);
+    }
+
+    #[test]
+    fn deserialize_invalid_delay() {
+        assert!(serde_qs::from_str::<Response>("delay=abc").is_err());
+        assert!(serde_qs::from_str::<Response>("delay=-1").is_err());
+    }
+
+    #[tokio::test]
+    async fn response_honors_delay() {
+        let response: Response = serde_qs::from_str("body=Hello&delay=50").unwrap();
+        let started_at = Instant::now();
+
+        let _ = response.into_response().await;
+
+        assert!(started_at.elapsed() >= Duration::from_millis(50));
     }
 }

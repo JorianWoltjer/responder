@@ -14,13 +14,14 @@ const code = ref(`<h1>Hello, world!</h1>`)
 const language = ref('html')
 const filename = ref('poc.html')
 const status = ref(200)
+const delay = ref(0)
 const headers = ref(
   new Map([
     ['Content-Type', 'text/html'],
     ['', '']
   ])
 )
-const url = ref(computed(() => getFinalURL()))
+const url = computed(() => getFinalURL())
 const toast = useToast()
 const currentTip = ref(0)
 
@@ -89,7 +90,6 @@ function changeLanguage() {
   if (ext == 'javascript') ext = 'js'
   if (ext == 'plain') ext = 'txt'
   filename.value = filename.value.replace(/\.\w+$/, `.${ext}`)
-  url.value = getFinalURL()
 
   if (mime.getType(ext)) {
     headers.value.set('Content-Type', mime.getType(ext))
@@ -113,6 +113,9 @@ function getFinalURL() {
 
   if (status.value !== 200) {
     url.searchParams.set('status', status.value)
+  }
+  if (delay.value > 0) {
+    url.searchParams.set('delay', delay.value)
   }
 
   const headers_ = new Map(headers.value)
@@ -226,8 +229,19 @@ addEventListener(
               v-tooltip.top="{ value: 'Filename' }"
               placeholder="/"
               v-model="filename"
-              @input="url = getFinalURL()"
             />
+            <div class="flex align-items-center ml-2">
+              <span class="mr-2 text-primary font-bold">Delay:</span>
+              <InputNumber
+                v-tooltip.top="{ value: 'Response delay in milliseconds' }"
+                inputClass="delay h-2rem"
+                highlightOnFocus
+                :useGrouping="false"
+                v-model="delay"
+                :min="0"
+              />
+              <span class="ml-2">ms</span>
+            </div>
             <div class="flex-1 align-self-end text-right">
               <Button
                 class="ml-2 w-5rem"
@@ -235,12 +249,7 @@ addEventListener(
                 icon="pi pi-barcode"
                 :severity="base64Checked ? 'primary' : 'secondary'"
                 aria-label="Base64"
-                @click="
-                  () => {
-                    base64Checked = !base64Checked
-                    url = getFinalURL()
-                  }
-                "
+                @click="base64Checked = !base64Checked"
               />
               <Button
                 class="ml-2 w-5rem"
@@ -255,7 +264,7 @@ addEventListener(
           <div>
             <InputText
               v-tooltip.bottom="{ value: 'Final URL' }"
-              v-model="url"
+              :modelValue="url"
               readonly
               placeholder="Disabled"
               class="mr-2"
@@ -296,5 +305,9 @@ addEventListener(
 }
 .hover-flip:hover img {
   transform: scale(-1, 1);
+}
+.delay {
+  width: 8ch;
+  text-align: center;
 }
 </style>
