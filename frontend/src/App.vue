@@ -35,44 +35,44 @@ const MONACO_EDITOR_OPTIONS = {
 }
 
 const editorRef = shallowRef()
-const handleMount = (editor) => {
-  useMonacoEx(window.monaco)
+const handleMount = (editor, monaco) => {
+  useMonacoEx(monaco)
   // For some reason need to load the languages once
-  const language = editor.getModel().getLanguageId()
+  const languageId = editor.getModel().getLanguageId()
   editor.getModel().setLanguage('javascript')
   editor.getModel().setLanguage('css')
-  editor.getModel().setLanguage(language)
-  emmetHTML(window.monaco)
-  emmetCSS(window.monaco)
+  editor.getModel().setLanguage(languageId)
+  emmetHTML(monaco)
+  emmetCSS(monaco)
 
   editorRef.value = editor
-  window.monaco.editor.addKeybindingRule({
-    keybinding: window.monaco.KeyMod.CtrlCmd | window.monaco.KeyCode.KeyS,
+  monaco.editor.addKeybindingRule({
+    keybinding: monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS,
     command: 'editor.action.formatDocument',
     when: 'textInputFocus'
   })
   editor.addAction({
     id: 'open-url',
     label: 'Open URL',
-    keybindings: [window.monaco.KeyMod.CtrlCmd | window.monaco.KeyCode.Enter],
+    keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter],
     precondition: 'textInputFocus',
     run: () => {
       open(url.value)
     }
   })
 
-  for (const [language, snippet] of Object.entries(SNIPPETS)) {
+  for (const [snippetLanguage, snippet] of Object.entries(SNIPPETS)) {
     for (const [name, value] of Object.entries(snippet)) {
-      window.monaco.languages.registerCompletionItemProvider(language, {
+      monaco.languages.registerCompletionItemProvider(snippetLanguage, {
         provideCompletionItems: () => {
           return {
             suggestions: [
               {
                 label: name,
                 documentation: value['description'],
-                kind: window.monaco.languages.CompletionItemKind.Snippet,
+                kind: monaco.languages.CompletionItemKind.Snippet,
                 insertTextRules:
-                  window.monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                  monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
                 insertText: value['code']
               }
             ]
@@ -253,6 +253,7 @@ addEventListener(
                 v-model="delay"
                 :min="0"
                 :max="300000"
+                @input="({ value }) => (delay = value ?? 0)"
               />
               <span class="ml-2">ms</span>
             </div>

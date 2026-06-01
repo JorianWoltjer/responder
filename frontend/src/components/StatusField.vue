@@ -6,7 +6,7 @@ const status = defineModel()
 function codeToReasonPhrase(code) {
   try {
     return `"${getReasonPhrase(code)}"`
-  } catch (error) {
+  } catch {
     return `???`
   }
 }

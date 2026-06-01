@@ -10,6 +10,7 @@ export const HTTP_HEADERS = [
   "Location",
   "Set-Cookie",
   "Content-Security-Policy",
+  "Content-Security-Policy-Report-Only",
   "Permissions-Policy",
   "Referrer-Policy",
   "X-Frame-Options",

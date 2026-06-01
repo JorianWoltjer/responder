@@ -3,34 +3,41 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=20.19.0"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "lint": "eslint . --ext .vue,.js,.jsx,.cjs,.mjs --fix --ignore-path .gitignore",
+    "lint": "eslint . --fix",
     "format": "prettier --write src/"
   },
   "dependencies": {
-    "@guolao/vue-monaco-editor": "^1.5.4",
-    "emmet-monaco-es": "^5.5.0",
+    "@fontsource-variable/inter": "^5.2.8",
+    "@guolao/vue-monaco-editor": "^1.6.0",
+    "@primeuix/themes": "^2.0.3",
+    "emmet-monaco-es": "^5.7.0",
     "http-status-codes": "^2.3.0",
-    "mime": "^4.0.6",
-    "mime-types": "^2.1.35",
-    "monaco-editor-ex": "^1.5.3",
-    "primeflex": "^3.3.1",
+    "mime": "^4.1.0",
+    "mime-types": "^3.0.2",
+    "monaco-editor": "^0.55.1",
+    "monaco-editor-ex": "^1.6.0",
+    "primeflex": "^4.0.0",
     "primeicons": "^7.0.0",
-    "primevue": "^3.53.1",
-    "vue": "^3.4.21"
+    "primevue": "^4.5.5",
+    "vue": "^3.5.35"
   },
   "devDependencies": {
-    "@rushstack/eslint-patch": "^1.10.5",
-    "@vitejs/plugin-vue": "^5.2.1",
-    "@vue/eslint-config-prettier": "^8.0.0",
-    "eslint": "^8.57.1",
-    "eslint-plugin-vue": "^9.32.0",
-    "prettier": "^3.5.1",
-    "vite": "^5.4.14",
+    "@eslint/js": "^10.0.1",
+    "@vitejs/plugin-vue": "^6.0.7",
+    "@vue/eslint-config-prettier": "^10.2.0",
+    "eslint": "^10.4.1",
+    "eslint-plugin-vue": "^10.9.1",
+    "globals": "^17.6.0",
+    "prettier": "^3.8.3",
+    "vite": "^8.0.14",
     "vite-plugin-html": "^3.2.2",
-    "vite-plugin-singlefile": "^2.1.0"
+    "vite-plugin-singlefile": "^2.3.3"
   }
 }
