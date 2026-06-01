@@ -11,6 +11,9 @@ use tokio::time::{sleep, Duration};
 
 use crate::{get_gist_content, Err};
 
+/// Maximum `delay` query parameter in milliseconds (5 minutes).
+pub const MAX_DELAY_MS: u64 = 5 * 60 * 1000;
+
 #[derive(Deserialize, Serialize, Debug)]
 pub struct Response {
     #[serde(alias = "s", alias = "code", default = "default_status")]
@@ -30,7 +33,7 @@ pub struct Response {
     pub headers: HashMap<String, String>,
     #[serde(default, deserialize_with = "deserialize_bool")]
     pub cors: bool,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_delay")]
     pub delay: u64,
     #[serde(skip)]
     pub path: Option<String>,
@@ -48,6 +51,40 @@ where
         "false" | "f" | "no" | "n" | "0" => Ok(false),
         _ => Ok(true),
     }
+}
+
+fn parse_delay_ms(s: &str) -> Option<u64> {
+    let s = s.trim();
+    if s.is_empty() {
+        return None;
+    }
+    let (value_str, multiplier) = if let Some(num) = s.strip_suffix('s') {
+        (num, 1_000.0)
+    } else if let Some(num) = s.strip_suffix('m') {
+        (num, 60.0 * 1_000.0)
+    } else {
+        (s, 1.0)
+    };
+    if value_str.is_empty() {
+        return None;
+    }
+    let value: f64 = value_str.parse().ok()?;
+    if !value.is_finite() || value < 0.0 {
+        return None;
+    }
+    let ms = (value * multiplier).round();
+    if ms < 0.0 || ms > u64::MAX as f64 {
+        return None;
+    }
+    Some(ms as u64)
+}
+
+fn deserialize_delay<'de, D>(deserializer: D) -> Result<u64, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    parse_delay_ms(&s).ok_or_else(|| serde::de::Error::custom("invalid delay"))
 }
 
 lazy_static! {
@@ -261,9 +298,46 @@ mod tests {
     }
 
     #[test]
+    fn deserialize_delay_with_suffix() {
+        assert_eq!(
+            serde_qs::from_str::<Response>("delay=5s").unwrap().delay,
+            5_000
+        );
+        assert_eq!(
+            serde_qs::from_str::<Response>("delay=2m").unwrap().delay,
+            120_000
+        );
+        assert_eq!(
+            serde_qs::from_str::<Response>("delay=5m").unwrap().delay,
+            MAX_DELAY_MS
+        );
+        assert_eq!(
+            serde_qs::from_str::<Response>("delay=0.1s").unwrap().delay,
+            100
+        );
+        assert_eq!(
+            serde_qs::from_str::<Response>("delay=1.5s").unwrap().delay,
+            1_500
+        );
+        assert_eq!(
+            serde_qs::from_str::<Response>("delay=0.5m").unwrap().delay,
+            30_000
+        );
+    }
+
+    #[test]
     fn deserialize_invalid_delay() {
         assert!(serde_qs::from_str::<Response>("delay=abc").is_err());
         assert!(serde_qs::from_str::<Response>("delay=-1").is_err());
+        assert!(serde_qs::from_str::<Response>("delay=-0.1s").is_err());
+        assert!(serde_qs::from_str::<Response>("delay=5x").is_err());
+        assert!(serde_qs::from_str::<Response>("delay=s").is_err());
+        assert!(serde_qs::from_str::<Response>("delay=m").is_err());
+    }
+
+    #[test]
+    fn max_delay_constant() {
+        assert_eq!(MAX_DELAY_MS, 300_000);
     }
 
     #[tokio::test]

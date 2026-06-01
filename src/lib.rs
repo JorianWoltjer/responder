@@ -7,7 +7,7 @@ use axum::{
     response::{Html, IntoResponse},
 };
 use regex::Regex;
-use response::Response;
+use response::{Response, MAX_DELAY_MS};
 
 pub mod response;
 
@@ -36,6 +36,9 @@ pub async fn index(request: Request) -> Result<axum::response::Response, StatusC
     }
     let mut response: Response =
         serde_qs::from_str(query_string).map_err(|_| StatusCode::BAD_REQUEST)?;
+    if response.delay > MAX_DELAY_MS {
+        return Err(StatusCode::BAD_REQUEST);
+    }
     response.path.replace(path);
 
     Ok(response.into_response().await)
@@ -94,5 +97,19 @@ mod tests {
         let response = index(request).await.unwrap_err();
 
         assert_eq!(response, StatusCode::BAD_REQUEST);
+    }
+
+    #[tokio::test]
+    async fn delay_over_max_returns_bad_request() {
+        for uri in ["/?delay=300001", "/?delay=6m"] {
+            let request = Request::builder()
+                .uri(uri)
+                .body(axum::body::Body::empty())
+                .unwrap();
+
+            let response = index(request).await.unwrap_err();
+
+            assert_eq!(response, StatusCode::BAD_REQUEST);
+        }
     }
 }
