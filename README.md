@@ -15,6 +15,7 @@ With Responder, you have a super quick **web UI** that generates a permanent URL
 * **Set body data**: Use the `?body=` parameter to set an content body, or use the shorthand `?body.b64=` to decode from raw Base64 instead.
 * **Set exact response headers**: Use the `?h[Header-Name]=` parameter multiple times to set any amount of headers for the response. There are some shorthands like `?h[ct]=` for `Content-Type`, or `?h[l]` for Location. Lastly, the `?cors` paramter alone will set all wildcard [Cross-Origin Resource Sharing](https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS) headers to make sure cross-site requests can read the content.
 * **Status code**: Use the `?status=` parameter to set the [response status code](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status)
+* **Delayed responses**: Use the `?delay=` parameter to delay the response server-side (maximum 5 minutes). Values are in milliseconds by default; suffix `s` means seconds and `m` means minutes (e.g. `?delay=0.2s`, `?delay=1m`).
 * **Gist fetching**: For large bodies that won't fit in a URL, you can [create a gist](https://gist.github.com/) and put the URL in the `?gist=` parameter. This will fetch the gists raw content and return it as the body, with any custom headers/status you set.
 
 ## FAQ

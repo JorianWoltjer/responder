@@ -14,13 +14,14 @@ const code = ref(`<h1>Hello, world!</h1>`)
 const language = ref('html')
 const filename = ref('poc.html')
 const status = ref(200)
+const delay = ref(0)
 const headers = ref(
   new Map([
     ['Content-Type', 'text/html'],
     ['', '']
   ])
 )
-const url = ref(computed(() => getFinalURL()))
+const url = computed(() => getFinalURL())
 const toast = useToast()
 const currentTip = ref(0)
 
@@ -89,7 +90,6 @@ function changeLanguage() {
   if (ext == 'javascript') ext = 'js'
   if (ext == 'plain') ext = 'txt'
   filename.value = filename.value.replace(/\.\w+$/, `.${ext}`)
-  url.value = getFinalURL()
 
   if (mime.getType(ext)) {
     headers.value.set('Content-Type', mime.getType(ext))
@@ -113,6 +113,9 @@ function getFinalURL() {
 
   if (status.value !== 200) {
     url.searchParams.set('status', status.value)
+  }
+  if (delay.value > 0) {
+    url.searchParams.set('delay', delay.value)
   }
 
   const headers_ = new Map(headers.value)
@@ -140,8 +143,11 @@ function getFinalURL() {
   const search = url.search || '?'
   return url.pathname + search.replace(/%5B/g, '[').replace(/%5D/g, ']')
 }
-function copyFinalURL(text) {
-  navigator.clipboard.writeText(location.origin + text)
+function copyFinalURL() {
+  // Cell edits commit on a document click listener that runs after this button's click handler.
+  setTimeout(() => {
+    navigator.clipboard.writeText(location.origin + url.value)
+  }, 0)
 }
 
 function showRandomTip() {
@@ -175,22 +181,22 @@ addEventListener(
       /></a>
       <span class="bg-primary">Responder</span>
     </h1>
-    <div class="flex flex-wrap">
-      <div class="flex-1 border-round mr-4 mb-3 relative">
+    <div class="app-layout flex flex-wrap">
+      <div class="editor-pane border-round mr-4 mb-3 relative">
         <vue-monaco-editor
           v-model:value="code"
           theme="vs-dark"
           language="html"
           :options="MONACO_EDITOR_OPTIONS"
           @mount="handleMount"
-          :height="previewChecked ? '50vh' : '80vh'"
+          :height="previewChecked ? 'var(--editor-height-preview)' : 'var(--editor-height)'"
           class="mb-2"
         />
         <iframe
           v-if="previewChecked"
           :src="previewChecked ? url : '/?body='"
           sandbox="allow-scripts allow-forms"
-          style="width: 100%; height: calc(30vh - 0.5rem)"
+          class="preview-frame"
         ></iframe>
         <div class="mx-2">
           <hr />
@@ -216,18 +222,40 @@ addEventListener(
           </div>
         </div>
       </div>
-      <div class="flex-1 flex flex-column mb-3">
+      <div class="config-pane flex flex-column mb-3">
         <StatusField v-model="status" />
         <HeaderTable v-model="headers" class="mb-3" />
         <div class="mt-auto w-full">
           <hr />
           <div class="mb-2 flex">
             <InputText
+              class="filename-field flex-1"
               v-tooltip.top="{ value: 'Filename' }"
               placeholder="/"
               v-model="filename"
-              @input="url = getFinalURL()"
             />
+            <div
+              class="delay-group flex align-items-center ml-2 flex-shrink-0"
+              v-tooltip.top="{ value: 'Response delay' }"
+            >
+              <i class="pi pi-clock mr-2 text-primary" aria-hidden="true" />
+              <InputNumber
+                inputClass="h-2rem"
+                :inputStyle="{
+                  width: '8ch',
+                  minWidth: '8ch',
+                  maxWidth: '8ch',
+                  flex: '0 0 auto',
+                  textAlign: 'center'
+                }"
+                highlightOnFocus
+                :useGrouping="false"
+                v-model="delay"
+                :min="0"
+                :max="300000"
+              />
+              <span class="ml-2">ms</span>
+            </div>
             <div class="flex-1 align-self-end text-right">
               <Button
                 class="ml-2 w-5rem"
@@ -235,12 +263,7 @@ addEventListener(
                 icon="pi pi-barcode"
                 :severity="base64Checked ? 'primary' : 'secondary'"
                 aria-label="Base64"
-                @click="
-                  () => {
-                    base64Checked = !base64Checked
-                    url = getFinalURL()
-                  }
-                "
+                @click="base64Checked = !base64Checked"
               />
               <Button
                 class="ml-2 w-5rem"
@@ -255,7 +278,7 @@ addEventListener(
           <div>
             <InputText
               v-tooltip.bottom="{ value: 'Final URL' }"
-              v-model="url"
+              :modelValue="url"
               readonly
               placeholder="Disabled"
               class="mr-2"
@@ -278,7 +301,7 @@ addEventListener(
               icon="pi pi-clipboard"
               severity="secondary"
               aria-label="Copy to Clipboard"
-              @click="copyFinalURL(url)"
+              @click="copyFinalURL"
             />
           </div>
         </div>
@@ -288,6 +311,48 @@ addEventListener(
 </template>
 
 <style scoped>
+.app-layout {
+  container-type: inline-size;
+  container-name: app-layout;
+}
+
+.app-layout > .editor-pane,
+.app-layout > .config-pane {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.editor-pane {
+  --editor-height: 80vh;
+  --editor-height-preview: 50vh;
+  --preview-frame-height: calc(30vh - 0.5rem);
+}
+
+.preview-frame {
+  width: 100%;
+  height: var(--preview-frame-height);
+}
+
+@container app-layout (max-width: 56rem) {
+  .app-layout {
+    flex-direction: column;
+    flex-wrap: nowrap;
+  }
+
+  .app-layout > .editor-pane,
+  .app-layout > .config-pane {
+    flex: 0 0 auto;
+    width: 100%;
+  }
+
+  .editor-pane {
+    --editor-height: clamp(12rem, calc(100dvh - 26rem), 42vh);
+    --editor-height-preview: clamp(10rem, calc(55dvh - 14rem), 32vh);
+    --preview-frame-height: clamp(8rem, calc(45dvh - 14rem), 20vh);
+    margin-right: 0 !important;
+  }
+}
+
 .image-in-text {
   height: 25px;
 }
@@ -296,5 +361,21 @@ addEventListener(
 }
 .hover-flip:hover img {
   transform: scale(-1, 1);
+}
+.filename-field {
+  min-width: 0;
+}
+
+.delay-group :deep(.p-inputnumber) {
+  width: auto;
+  flex: 0 0 auto;
+}
+
+.delay-group :deep(.p-inputnumber-input) {
+  width: 8ch !important;
+  min-width: 8ch;
+  max-width: 8ch;
+  flex: 0 0 auto !important;
+  text-align: center;
 }
 </style>
