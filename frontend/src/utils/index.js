@@ -36,16 +36,6 @@ export const HTTP_HEADERS = [
 // https://code.visualstudio.com/docs/editing/userdefinedsnippets
 export const SNIPPETS = {
   "html": {
-    "!csrf": {
-      "description": "Create a Cross-Site Request Forgery template",
-      "code": `<form id="form" action="https://\${1:example.com/endpoint}" method="POST">
-  <input type="hidden" name="\${2:name}" value="\${3:value}">$0
-  <button type="submit">Submit</button>
-</form>
-<script>
-  form.submit()
-</script>`
-    },
     "!name-xss": {
       "description": "Create a window.name redirect XSS template",
       "code": `<script>

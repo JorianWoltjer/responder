@@ -2,6 +2,7 @@
 import { computed, ref, shallowRef } from 'vue'
 import { SelectLanguage, HeaderTable, StatusField } from '@/components'
 import { CORS_HEADERS, HEADER_ALIAS, SNIPPETS, TIPS, hasCORS } from '@/utils'
+import { buildCsrfFormHtml, parseHttpRequest } from '@/utils/csrfPoc'
 
 import { useToast } from 'primevue/usetoast'
 import { emmetHTML, emmetCSS } from 'emmet-monaco-es'
@@ -9,6 +10,17 @@ import { useMonacoEx } from 'monaco-editor-ex'
 import mime from 'mime'
 
 const previewChecked = ref(false)
+const csrfChecked = ref(false)
+const csrfExampleRequest =
+  'POST /path HTTP/1.1\nHost: example.com\nContent-Type: application/x-www-form-urlencoded\n\nname=value'
+const rawHttpRequest = ref(csrfExampleRequest)
+const lastGeneratedHttpRequest = ref(null)
+const csrfGenerateDirty = computed(
+  () =>
+    lastGeneratedHttpRequest.value === null ||
+    rawHttpRequest.value !== lastGeneratedHttpRequest.value
+)
+const panelOpen = computed(() => previewChecked.value || csrfChecked.value)
 const base64Checked = ref(false)
 const code = ref(`<h1>Hello, world!</h1>`)
 const language = ref('html')
@@ -84,6 +96,7 @@ const handleMount = (editor, monaco) => {
 }
 
 function changeLanguage() {
+  if (!editorRef.value) return
   editorRef.value.getModel().setLanguage(language.value)
 
   let ext = language.value
@@ -98,6 +111,41 @@ function changeLanguage() {
 
 function open(url) {
   window.open(url, '_blank')
+}
+
+function togglePreview() {
+  if (previewChecked.value) {
+    previewChecked.value = false
+  } else {
+    previewChecked.value = true
+    csrfChecked.value = false
+  }
+}
+
+function toggleCsrf() {
+  if (csrfChecked.value) {
+    csrfChecked.value = false
+  } else {
+    csrfChecked.value = true
+    previewChecked.value = false
+  }
+}
+
+function generateCsrfPoC() {
+  try {
+    const parsed = parseHttpRequest(rawHttpRequest.value)
+    code.value = buildCsrfFormHtml(parsed)
+    language.value = 'html'
+    changeLanguage()
+    lastGeneratedHttpRequest.value = rawHttpRequest.value
+  } catch (error) {
+    toast.add({
+      severity: 'warn',
+      life: 5000,
+      summary: 'Could not parse request',
+      detail: error.message
+    })
+  }
 }
 
 function getFinalURL() {
@@ -189,19 +237,38 @@ addEventListener(
           language="html"
           :options="MONACO_EDITOR_OPTIONS"
           @mount="handleMount"
-          :height="previewChecked ? 'var(--editor-height-preview)' : 'var(--editor-height)'"
+          :height="panelOpen ? 'var(--editor-height-preview)' : 'var(--editor-height)'"
           class="mb-2"
         />
         <iframe
           v-if="previewChecked"
-          :src="previewChecked ? url : '/?body='"
+          :src="url"
           sandbox="allow-scripts allow-forms"
-          class="preview-frame"
+          class="editor-panel preview-frame"
         ></iframe>
+        <div v-else-if="csrfChecked" class="editor-panel csrf-panel mb-2">
+          <Textarea
+            v-model="rawHttpRequest"
+            class="csrf-request-input w-full"
+          />
+          <Button
+            label="Generate"
+            class="mt-2"
+            :severity="csrfGenerateDirty ? 'primary' : 'secondary'"
+            @click="generateCsrfPoC"
+          />
+        </div>
         <div class="mx-2">
           <hr />
           <div>
             <SelectLanguage v-model="language" @change="changeLanguage" />
+            <Button
+              label="CSRF PoC"
+              class="ml-2 align-top"
+              title="CSRF Proof of Concept generator"
+              :severity="csrfChecked ? 'primary' : 'secondary'"
+              @click="toggleCsrf"
+            />
             <div class="inline absolute right-0 mx-2">
               <Button
                 class="mr-2"
@@ -216,7 +283,7 @@ addEventListener(
                 title="Live Preview"
                 aria-label="Live Preview"
                 :severity="previewChecked ? 'primary' : 'secondary'"
-                @click="previewChecked = !previewChecked"
+                @click="togglePreview"
               />
             </div>
           </div>
@@ -329,9 +396,30 @@ addEventListener(
   --preview-frame-height: calc(30vh - 0.5rem);
 }
 
-.preview-frame {
+.editor-panel {
   width: 100%;
   height: var(--preview-frame-height);
+}
+
+.preview-frame {
+  border: none;
+}
+
+.csrf-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+.csrf-request-input {
+  flex: 1;
+  min-height: 0;
+  resize: none;
+  font-family: monospace;
+  font-size: 0.875rem;
+}
+
+.csrf-panel :deep(.csrf-request-input) {
+  height: 100%;
 }
 
 @container app-layout (max-width: 56rem) {
