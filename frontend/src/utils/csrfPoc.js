@@ -1,11 +1,17 @@
 // v1: urlencoded, multipart, and JSON bodies, query params — no cookie fields.
 
 export function escapeHtmlAttr(value) {
-  return String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/"/g, '&quot;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
+  return Array.from(String(value))
+    .map((char) => {
+      const code = char.codePointAt(0)
+      if (code < 0x20 || code >= 0x7f) return `&#${code};`
+      if (char === '&') return '&amp;'
+      if (char === '"') return '&quot;'
+      if (char === '<') return '&lt;'
+      if (char === '>') return '&gt;'
+      return char
+    })
+    .join('')
 }
 
 function collectParams(searchParams) {
@@ -95,8 +101,17 @@ function formatFileContent(content) {
   return `new Uint8Array([${bytes.join(', ')}])`
 }
 
-function escapeHtmlSingleQuotedAttr(value) {
-  return String(value).replace(/&/g, '&amp;').replace(/'/g, '&#39;')
+function buildTextPlainFormHtml(method, action, fields) {
+  const lines = [
+    `<form id="form" action="${escapeHtmlAttr(action)}" method="${escapeHtmlAttr(method)}" enctype="text/plain">`
+  ]
+  for (const { name, value } of fields) {
+    lines.push(
+      `  <input type="text" name="${escapeHtmlAttr(name)}" value="${escapeHtmlAttr(value)}">`
+    )
+  }
+  lines.push(`  <button type="submit">Submit</button>`, '</form>', '<script>form.submit();</script>')
+  return lines.join('\n')
 }
 
 export function buildJsonTextPlainFields(jsonBody) {
@@ -146,17 +161,93 @@ function parseTextPlainBody(body) {
   return fields
 }
 
-function buildTextPlainFormHtml(method, action, fields) {
-  const lines = [
-    `<form id=form action="${escapeHtmlAttr(action)}" method="${escapeHtmlAttr(method)}" enctype="text/plain">`
-  ]
-  for (const { name, value } of fields) {
-    lines.push(
-      `  <input type="text" name='${escapeHtmlSingleQuotedAttr(name)}' value='${escapeHtmlSingleQuotedAttr(value)}'>`
-    )
+function applyBody(headers, body, fields, files) {
+  let jsonBody
+  let enctype
+  const contentType = headers['content-type'] || ''
+  const trimmedBody = body.trim()
+
+  if (contentType.includes('multipart/form-data') && trimmedBody) {
+    const boundary = parseContentTypeParam(contentType, 'boundary')
+    if (!boundary) {
+      throw new Error('Missing multipart boundary')
+    }
+    const parsed = parseMultipartBody(body, boundary)
+    fields.push(...parsed.fields)
+    files.push(...parsed.files)
+  } else if (trimmedBody) {
+    jsonBody = tryParseJsonBody(body)
+    if (jsonBody) {
+      enctype = 'text/plain'
+    } else if (contentType.includes('text/plain')) {
+      fields.push(...parseTextPlainBody(body))
+      enctype = 'text/plain'
+    } else if (contentType.includes('application/x-www-form-urlencoded')) {
+      fields.push(...collectParams(new URLSearchParams(trimmedBody)))
+    }
   }
-  lines.push(`  <button type="submit">Submit</button>`, '</form>', '<script>form.submit();</script>')
-  return lines.join('\n')
+
+  return { jsonBody, enctype }
+}
+
+const FETCH_CALL_RE =
+  /^\s*(?:await\s+)?fetch\s*\(\s*(["'])((?:\\.|(?!\1).)*)\1(?:\s*,\s*(\{[\s\S]*\}))?\s*\)\s*$/
+
+export function parseFetchRequest(raw) {
+  const text = raw.trim().replace(/;+\s*$/, '')
+  if (!text) {
+    throw new Error('Request is empty')
+  }
+
+  const match = text.match(FETCH_CALL_RE)
+  if (!match) {
+    throw new Error('Invalid fetch call')
+  }
+
+  const urlString = match[2].replace(/\\(.)/g, '$1')
+  const optionsLiteral = match[3]
+
+  let url
+  try {
+    url = new URL(urlString)
+  } catch {
+    throw new Error('Invalid fetch URL')
+  }
+
+  let options = {}
+  if (optionsLiteral) {
+    options = eval(`(${optionsLiteral})`)
+  }
+
+  const method = (options.method || 'GET').toUpperCase()
+  const headers = {}
+  if (options.headers && typeof options.headers === 'object') {
+    for (const [name, value] of Object.entries(options.headers)) {
+      headers[String(name).toLowerCase()] = String(value)
+    }
+  }
+
+  let body = ''
+  if (options.body != null) {
+    if (typeof options.body !== 'string') {
+      throw new Error('Unsupported fetch body type')
+    }
+    body = options.body
+  }
+
+  const fields = collectParams(url.searchParams)
+  const files = []
+  const { jsonBody, enctype } = applyBody(headers, body, fields, files)
+  const action = `${url.protocol}//${url.host}${url.pathname || '/'}`
+
+  return { method, action, fields, files, jsonBody, enctype }
+}
+
+export function parseRequest(raw) {
+  if (/^\s*(?:await\s+)?fetch\s*\(/i.test(raw.trim())) {
+    return parseFetchRequest(raw)
+  }
+  return parseHttpRequest(raw)
 }
 
 export function parseHttpRequest(raw) {
@@ -213,31 +304,7 @@ export function parseHttpRequest(raw) {
 
   const fields = collectParams(queryParams)
   const files = []
-  let jsonBody
-  let enctype
-
-  const contentType = headers['content-type'] || ''
-  const trimmedBody = body.trim()
-
-  if (contentType.includes('multipart/form-data') && trimmedBody) {
-    const boundary = parseContentTypeParam(contentType, 'boundary')
-    if (!boundary) {
-      throw new Error('Missing multipart boundary')
-    }
-    const parsed = parseMultipartBody(body, boundary)
-    fields.push(...parsed.fields)
-    files.push(...parsed.files)
-  } else if (trimmedBody) {
-    jsonBody = tryParseJsonBody(body)
-    if (jsonBody) {
-      enctype = 'text/plain'
-    } else if (contentType.includes('text/plain')) {
-      fields.push(...parseTextPlainBody(body))
-      enctype = 'text/plain'
-    } else if (contentType.includes('application/x-www-form-urlencoded')) {
-      fields.push(...collectParams(new URLSearchParams(trimmedBody)))
-    }
-  }
+  const { jsonBody, enctype } = applyBody(headers, body, fields, files)
 
   const action = host ? `${scheme}://${host}${pathname}` : pathname
 

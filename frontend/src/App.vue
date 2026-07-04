@@ -2,7 +2,7 @@
 import { computed, ref, shallowRef } from 'vue'
 import { SelectLanguage, HeaderTable, StatusField } from '@/components'
 import { CORS_HEADERS, HEADER_ALIAS, SNIPPETS, TIPS, hasCORS } from '@/utils'
-import { buildCsrfFormHtml, parseHttpRequest } from '@/utils/csrfPoc'
+import { buildCsrfFormHtml, parseRequest } from '@/utils/csrfPoc'
 
 import { useToast } from 'primevue/usetoast'
 import { emmetHTML, emmetCSS } from 'emmet-monaco-es'
@@ -13,6 +13,11 @@ const previewChecked = ref(false)
 const csrfChecked = ref(false)
 const csrfExampleRequest =
   'POST /path HTTP/1.1\nHost: example.com\nContent-Type: application/x-www-form-urlencoded\n\nname=value'
+const csrfRequestPlaceholder = `${csrfExampleRequest}
+
+--- or "Copy as Fetch": ---
+
+fetch(...)`
 const rawHttpRequest = ref(csrfExampleRequest)
 const lastGeneratedHttpRequest = ref(null)
 const csrfGenerateDirty = computed(
@@ -133,7 +138,7 @@ function toggleCsrf() {
 
 function generateCsrfPoC() {
   try {
-    const parsed = parseHttpRequest(rawHttpRequest.value)
+    const parsed = parseRequest(rawHttpRequest.value)
     code.value = buildCsrfFormHtml(parsed)
     language.value = 'html'
     changeLanguage()
@@ -249,6 +254,7 @@ addEventListener(
         <div v-else-if="csrfChecked" class="editor-panel csrf-panel mb-2">
           <Textarea
             v-model="rawHttpRequest"
+            :placeholder="csrfRequestPlaceholder"
             class="csrf-request-input w-full"
           />
           <Button
