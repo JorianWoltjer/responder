@@ -52,6 +52,22 @@ export const SNIPPETS = {
 </script>`
     }
   },
+  "javascript": {
+    "!sw": {
+      "description": "Service Worker fetch intercept",
+      "code": `self.addEventListener('install', e => e.waitUntil(self.skipWaiting()));
+self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
+
+self.addEventListener('fetch', (e) => {
+  console.log('Intercepted fetch for', e.request.url);
+  $0
+  
+  e.respondWith(new Response('<script>alert(origin)<\\/script>', {
+    headers: { 'Content-Type': 'text/html' }
+  }));
+});`
+    }
+  },
   "json": {
     "!proto": {
       "description": "Insert a __proto__ and prototype.constructor property",
