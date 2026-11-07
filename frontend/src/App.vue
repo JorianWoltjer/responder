@@ -6,6 +6,8 @@ import { buildCsrfFormHtml, parseRequest } from '@/utils/csrfPoc'
 
 import { useToast } from 'primevue/usetoast'
 import { emmetHTML, emmetCSS } from 'emmet-monaco-es'
+import { registerSvgEmmet } from '@/utils/svgEmmet'
+import { registerSvgAutocomplete } from '@/utils/svgComplete'
 import { useMonacoEx } from 'monaco-editor-ex'
 import mime from 'mime'
 
@@ -48,12 +50,63 @@ const MONACO_EDITOR_OPTIONS = {
   formatOnPaste: false,
   tabSize: 2,
   insertSpaces: true,
+  detectIndentation: false,
   wordWrap: 'on'
 }
 
+function indentationTabsToSpaces(text, tabSize) {
+  const spaces = ' '.repeat(tabSize)
+  return text.replace(/^\t+/gm, (tabs) => spaces.repeat(tabs.length))
+}
+
+// monaco-editor-ex formats HTML with tabs and ignores editor indent settings.
+function useSpacesInHtmlFormatter(monaco) {
+  const { htmlDefaults } = monaco.languages.html
+  htmlDefaults.setOptions({
+    ...htmlDefaults.options,
+    format: {
+      ...htmlDefaults.options.format,
+      tabSize: 2,
+      insertSpaces: true
+    }
+  })
+
+  const register = monaco.languages.registerDocumentFormattingEditProvider.bind(monaco.languages)
+  monaco.languages.registerDocumentFormattingEditProvider = (languageId, provider) => {
+    if (languageId === 'html' && provider?.provideDocumentFormattingEdits) {
+      const provide = provider.provideDocumentFormattingEdits.bind(provider)
+      provider = {
+        async provideDocumentFormattingEdits(model, options, token) {
+          const edits = await provide(model, options, token)
+          const tabSize = options?.tabSize || 2
+          return edits?.map((edit) => ({
+            ...edit,
+            text:
+              typeof edit.text === 'string'
+                ? indentationTabsToSpaces(edit.text, tabSize)
+                : edit.text
+          }))
+        }
+      }
+    }
+    return register(languageId, provider)
+  }
+  try {
+    useMonacoEx(monaco)
+  } finally {
+    monaco.languages.registerDocumentFormattingEditProvider = register
+  }
+}
+
 const editorRef = shallowRef()
+const textEncoder = new TextEncoder()
+const byteCountLabel = computed(() => {
+  const count = textEncoder.encode(code.value).length
+  return `${count.toLocaleString()} ${count === 1 ? 'byte' : 'bytes'}`
+})
+
 const handleMount = (editor, monaco) => {
-  useMonacoEx(monaco)
+  useSpacesInHtmlFormatter(monaco)
   // For some reason need to load the languages once
   const languageId = editor.getModel().getLanguageId()
   editor.getModel().setLanguage('javascript')
@@ -61,6 +114,8 @@ const handleMount = (editor, monaco) => {
   editor.getModel().setLanguage(languageId)
   emmetHTML(monaco)
   emmetCSS(monaco)
+  registerSvgEmmet(monaco)
+  registerSvgAutocomplete(monaco)
 
   editorRef.value = editor
   monaco.editor.addKeybindingRule({
@@ -88,8 +143,7 @@ const handleMount = (editor, monaco) => {
                 label: name,
                 documentation: value['description'],
                 kind: monaco.languages.CompletionItemKind.Snippet,
-                insertTextRules:
-                  monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
                 insertText: value['code']
               }
             ]
@@ -236,15 +290,17 @@ addEventListener(
     </h1>
     <div class="app-layout flex flex-wrap">
       <div class="editor-pane border-round mr-4 mb-3 relative">
-        <vue-monaco-editor
-          v-model:value="code"
-          theme="vs-dark"
-          language="html"
-          :options="MONACO_EDITOR_OPTIONS"
-          @mount="handleMount"
-          :height="panelOpen ? 'var(--editor-height-preview)' : 'var(--editor-height)'"
-          class="mb-2"
-        />
+        <div class="monaco-wrap relative mb-2">
+          <vue-monaco-editor
+            v-model:value="code"
+            theme="vs-dark"
+            language="html"
+            :options="MONACO_EDITOR_OPTIONS"
+            @mount="handleMount"
+            :height="panelOpen ? 'var(--editor-height-preview)' : 'var(--editor-height)'"
+          />
+          <span class="editor-byte-count">{{ byteCountLabel }}</span>
+        </div>
         <iframe
           v-if="previewChecked"
           :src="url"
@@ -400,6 +456,21 @@ addEventListener(
   --editor-height: 80vh;
   --editor-height-preview: 50vh;
   --preview-frame-height: calc(30vh - 0.5rem);
+}
+
+.editor-byte-count {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  z-index: 5;
+  padding: 0 0.4rem;
+  font-size: 11px;
+  line-height: 18px;
+  color: rgba(204, 204, 204, 0.75);
+  background: rgba(30, 30, 30, 0.92);
+  pointer-events: none;
+  user-select: none;
+  font-variant-numeric: tabular-nums;
 }
 
 .editor-panel {

