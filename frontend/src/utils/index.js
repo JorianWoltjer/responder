@@ -93,6 +93,7 @@ const COMMON_MEDIA_TYPES = [
 // An empty list means the header's value is free-form or requires user-specific parameters.
 export const HTTP_HEADER_VALUES = {
   'Content-Type': COMMON_MEDIA_TYPES,
+  'Content-Length': [],
   Location: [],
   'Set-Cookie': [],
   'Content-Security-Policy': ['sandbox', 'upgrade-insecure-requests'],
@@ -171,6 +172,7 @@ export const HTTP_HEADERS = Object.keys(HTTP_HEADER_VALUES)
 // compacted so they work as input placeholders without changing their header value.
 export const HTTP_HEADER_EXAMPLES = {
   'Content-Type': 'text/html; charset=utf-8',
+  'Content-Length': '1234',
   Location: '/index.html',
   'Set-Cookie': 'sessionId=38afes7a8',
   'Content-Security-Policy': 'default-src https:',
@@ -233,10 +235,14 @@ export function hasCORS(headers) {
   )
 }
 
-// Mirrored in src/lib.rs -> HEADER_ALIAS: HashMap
+// Mirrored in src/response.rs -> HEADER_ALIAS: HashMap
 export const HEADER_ALIAS = {
   'content-type': 'ct',
+  'content-length': 'cl',
   'set-cookie': 'c',
   location: 'l',
-  'content-security-policy': 'csp'
+  'content-security-policy': 'csp',
+  'cross-origin-opener-policy': 'coop',
+  'cross-origin-embedder-policy': 'coep',
+  'cross-origin-resource-policy': 'corp'
 }

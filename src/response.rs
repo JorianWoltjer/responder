@@ -119,12 +119,16 @@ fn set_default_content_type(
 static HEADER_ALIAS: LazyLock<HashMap<&'static str, &'static str>> = LazyLock::new(|| {
     let mut map = HashMap::new();
     map.insert("ct", "content-type");
+    map.insert("cl", "content-length");
     map.insert("c", "set-cookie");
     map.insert("sc", "set-cookie");
     map.insert("cookie", "set-cookie");
     map.insert("l", "location");
     map.insert("loc", "location");
     map.insert("csp", "content-security-policy");
+    map.insert("coop", "cross-origin-opener-policy");
+    map.insert("coep", "cross-origin-embedder-policy");
+    map.insert("corp", "cross-origin-resource-policy");
     map
 });
 
@@ -341,7 +345,10 @@ mod tests {
 
     #[tokio::test]
     async fn deserialize_header_alias() {
-        let query_string = "h[l]=file:///etc/passwd&h[ct]=text/html&h[c]=cookie%3D42";
+        let query_string = concat!(
+            "h[l]=file:///etc/passwd&h[ct]=text/html&h[cl]=42&h[c]=cookie%3D42",
+            "&h[coop]=same-origin&h[coep]=require-corp&h[corp]=cross-origin"
+        );
 
         let response: Response = serde_qs::from_str(query_string).unwrap();
         let axum_response = response.into_response().await;
@@ -349,7 +356,20 @@ mod tests {
         let headers = axum_response.headers();
         assert_eq!(headers.get("location").unwrap(), "file:///etc/passwd");
         assert_eq!(headers.get("content-type").unwrap(), "text/html");
+        assert_eq!(headers.get("content-length").unwrap(), "42");
         assert_eq!(headers.get("set-cookie").unwrap(), "cookie=42");
+        assert_eq!(
+            headers.get("cross-origin-opener-policy").unwrap(),
+            "same-origin"
+        );
+        assert_eq!(
+            headers.get("cross-origin-embedder-policy").unwrap(),
+            "require-corp"
+        );
+        assert_eq!(
+            headers.get("cross-origin-resource-policy").unwrap(),
+            "cross-origin"
+        );
     }
 
     #[tokio::test]

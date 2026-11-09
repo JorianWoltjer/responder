@@ -18,6 +18,7 @@
   const initialStatus = 200
   const initialDelay = 0
   const initialHeaders = [['Content-Type', 'text/html; charset=utf-8']]
+  const encoder = new TextEncoder()
 
   let code = $state(initialCode)
   let gistUrl = $state('')
@@ -29,6 +30,7 @@
   let activePanel = $state(null)
   let previewOpen = $state(false)
   let toasts = $state([])
+  let bodyLength = $derived(encoder.encode(code).length)
 
   let nextToastId = 1
   const toastTimers = new SvelteMap()
@@ -185,7 +187,7 @@
 
     <aside class="config-card" aria-label="Response configuration">
       <div class="config-content">
-        <HeaderEditor bind:headers bind:status />
+        <HeaderEditor bind:headers bind:status {bodyLength} />
         <div class="config-spacer" aria-hidden="true"></div>
       </div>
 

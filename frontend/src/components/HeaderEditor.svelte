@@ -11,7 +11,7 @@
   import Icon from './Icon.svelte'
   import StatusField from './StatusField.svelte'
 
-  let { headers = $bindable(), status = $bindable() } = $props()
+  let { headers = $bindable(), status = $bindable(), bodyLength = 0 } = $props()
 
   let corsEnabled = $derived(hasCORS(headers))
   let nextRowId = 1
@@ -23,6 +23,14 @@
     return { id, values: [...values], inputs }
   }
 
+  function isContentLength(name) {
+    return name.trim().toLowerCase() === 'content-length'
+  }
+
+  function getValueSuggestions(name) {
+    return isContentLength(name) ? [String(bodyLength)] : getHttpHeaderValues(name)
+  }
+
   function headersFromRows(sourceRows) {
     return sourceRows.filter((row) => row.values[0].trim()).map((row) => [...row.values])
   }
@@ -30,9 +38,7 @@
   function headersEqual(left, right) {
     return (
       left.length === right.length &&
-      left.every(
-        ([name, value], index) => name === right[index][0] && value === right[index][1]
-      )
+      left.every(([name, value], index) => name === right[index][0] && value === right[index][1])
     )
   }
 
@@ -137,7 +143,7 @@
     <div class="table-body">
       {#each rows as row, index (row.id)}
         {@const valueExample = getHttpHeaderExample(row.values[0])}
-        {@const valueSuggestions = getHttpHeaderValues(row.values[0])}
+        {@const valueSuggestions = getValueSuggestions(row.values[0])}
         {@const isInputRow = index === rows.length - 1}
         <div class="header-row">
           <input

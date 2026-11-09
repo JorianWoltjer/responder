@@ -11,13 +11,14 @@ test('builds a compact response URL', () => {
     delay: 250,
     headers: new Map([
       ['Content-Type', 'text/html; charset=utf-8'],
+      ['Content-Length', '14'],
       ['Location', 'https://example.com/next']
     ])
   })
 
   assert.equal(
     path,
-    '/poc.html?body=%3Ch1%3EHello%3C%2Fh1%3E&status=302&delay=250&h[l]=https%3A%2F%2Fexample%2Ecom%2Fnext'
+    '/poc.html?body=%3Ch1%3EHello%3C%2Fh1%3E&status=302&delay=250&h[cl]=14&h[l]=https%3A%2F%2Fexample%2Ecom%2Fnext'
   )
 })
 
@@ -44,6 +45,18 @@ test('preserves duplicate response headers', () => {
   })
 
   assert.equal(path, '/?body=ok&h[c]=a%3D1&h[c]=b%3D2')
+})
+
+test('uses cross-origin policy header aliases', () => {
+  const path = buildResponsePath({
+    headers: [
+      ['Cross-Origin-Opener-Policy', 'same-origin'],
+      ['Cross-Origin-Embedder-Policy', 'require-corp'],
+      ['Cross-Origin-Resource-Policy', 'cross-origin']
+    ]
+  })
+
+  assert.equal(path, '/?h[coop]=same%2Dorigin&h[coep]=require%2Dcorp&h[corp]=cross%2Dorigin')
 })
 
 test('uses a gist URL instead of an inline body', () => {
