@@ -146,8 +146,7 @@ export function svgEmmetExpansions(abbreviation, { syntax = 'html', insideSvg = 
   ).sort((a, b) => a.length - b.length || a.localeCompare(b))
 
   return matches.flatMap((key) => {
-    const rewritten =
-      abbreviation.slice(0, last.start) + key + abbreviation.slice(last.end)
+    const rewritten = abbreviation.slice(0, last.start) + key + abbreviation.slice(last.end)
     const insertText = expandSnippet(rewritten, syntax)
     if (!insertText) return []
     return [

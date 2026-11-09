@@ -1,21 +1,20 @@
 import js from '@eslint/js'
-import pluginVue from 'eslint-plugin-vue'
-import skipFormatting from '@vue/eslint-config-prettier/skip-formatting'
+import svelte from 'eslint-plugin-svelte'
 import globals from 'globals'
 
 export default [
   {
     name: 'app/files-to-ignore',
-    ignores: ['**/dist/**', '**/node_modules/**']
+    ignores: ['**/dist/**', '**/node_modules/**', 'data/svg-completion.js']
   },
+  js.configs.recommended,
+  ...svelte.configs.recommended,
   {
     languageOptions: {
       globals: {
-        ...globals.browser
+        ...globals.browser,
+        ...globals.node
       }
     }
-  },
-  js.configs.recommended,
-  ...pluginVue.configs['flat/essential'],
-  skipFormatting
+  }
 ]

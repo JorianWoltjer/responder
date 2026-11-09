@@ -1,10 +1,10 @@
 # frontend
 
-This template should help get you started developing with Vue 3 in Vite.
+The Svelte frontend for Responder. It is built as a single HTML file so the Rust server can embed it in the binary.
 
 ## Recommended IDE Setup
 
-[VSCode](https://code.visualstudio.com/) + [Volar](https://marketplace.visualstudio.com/items?itemName=Vue.volar) (and disable Vetur).
+[VSCode](https://code.visualstudio.com/) + the [Svelte extension](https://marketplace.visualstudio.com/items?itemName=svelte.svelte-vscode).
 
 ## Customize configuration
 
@@ -28,8 +28,10 @@ npm run dev
 npm run build
 ```
 
-### Lint with [ESLint](https://eslint.org/)
+### Validate, test, and lint
 
 ```sh
+npm run check
+npm test
 npm run lint
 ```
