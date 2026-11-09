@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, shallowRef } from 'vue'
+import { computed, onBeforeUnmount, ref, shallowRef } from 'vue'
 import { SelectLanguage, HeaderTable, StatusField } from '@/components'
 import { CORS_HEADERS, HEADER_ALIAS, SNIPPETS, TIPS, hasCORS } from '@/utils'
 import { buildCsrfFormHtml, parseRequest } from '@/utils/csrfPoc'
@@ -100,10 +100,31 @@ function useSpacesInHtmlFormatter(monaco) {
 
 const editorRef = shallowRef()
 const textEncoder = new TextEncoder()
+const selectedByteCount = ref(0)
+let editorDisposables = []
+
 const byteCountLabel = computed(() => {
-  const count = textEncoder.encode(code.value).length
-  return `${count.toLocaleString()} ${count === 1 ? 'byte' : 'bytes'}`
+  const total = textEncoder.encode(code.value).length
+  if (selectedByteCount.value > 0) {
+    return `${selectedByteCount.value.toLocaleString()}/${total.toLocaleString()} bytes`
+  }
+  return `${total.toLocaleString()} ${total === 1 ? 'byte' : 'bytes'}`
 })
+
+function updateSelectedByteCount(editor) {
+  const model = editor.getModel()
+  selectedByteCount.value = model
+    ? (editor.getSelections() || []).reduce(
+        (total, selection) => total + textEncoder.encode(model.getValueInRange(selection)).length,
+        0
+      )
+    : 0
+}
+
+function disposeEditorListeners() {
+  editorDisposables.forEach((disposable) => disposable.dispose())
+  editorDisposables = []
+}
 
 const handleMount = (editor, monaco) => {
   useSpacesInHtmlFormatter(monaco)
@@ -118,6 +139,12 @@ const handleMount = (editor, monaco) => {
   registerSvgAutocomplete(monaco)
 
   editorRef.value = editor
+  disposeEditorListeners()
+  updateSelectedByteCount(editor)
+  editorDisposables = [
+    editor.onDidChangeCursorSelection(() => updateSelectedByteCount(editor)),
+    editor.onDidChangeModelContent(() => updateSelectedByteCount(editor))
+  ]
   monaco.editor.addKeybindingRule({
     keybinding: monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS,
     command: 'editor.action.formatDocument',
@@ -153,6 +180,8 @@ const handleMount = (editor, monaco) => {
     }
   }
 }
+
+onBeforeUnmount(disposeEditorListeners)
 
 function changeLanguage() {
   if (!editorRef.value) return
@@ -464,6 +493,7 @@ addEventListener(
   bottom: 0;
   z-index: 5;
   padding: 0 0.4rem;
+  font-family: monospace;
   font-size: 11px;
   line-height: 18px;
   color: rgba(204, 204, 204, 0.75);
