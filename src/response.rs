@@ -1,4 +1,4 @@
-use std::{collections::HashMap, str::FromStr, time::Instant};
+use std::{borrow::Cow, collections::HashMap, str::FromStr, time::Instant};
 
 use axum::{
     http::{HeaderName, HeaderValue, StatusCode},
@@ -87,6 +87,20 @@ where
     parse_delay_ms(&s).ok_or_else(|| serde::de::Error::custom("invalid delay"))
 }
 
+fn with_utf8_charset(content_type: &'static str) -> Cow<'static, str> {
+    if content_type.starts_with("text/") || content_type == "application/xml" {
+        Cow::Owned(format!("{content_type}; charset=utf-8"))
+    } else {
+        Cow::Borrowed(content_type)
+    }
+}
+
+fn content_type_from_path(path: &str) -> Option<Cow<'static, str>> {
+    mime_guess::from_path(path)
+        .first_raw()
+        .map(with_utf8_charset)
+}
+
 lazy_static! {
     // Mirrored in frontend/src/utils/index.js -> const HEADER_ALIAS
     static ref HEADER_ALIAS: HashMap<&'static str, &'static str> = {
@@ -127,13 +141,12 @@ impl Response {
             let key = HEADER_ALIAS.get(key.as_str()).copied().unwrap_or(key);
             headers.append(HeaderName::from_str(key)?, HeaderValue::from_str(value)?);
         }
+        let inferred_content_type = self.path.as_deref().and_then(content_type_from_path);
         // Set Content-Type from path extension if not set
         headers.entry("content-type").or_insert(
             HeaderValue::from_str(
-                self.path
+                inferred_content_type
                     .as_deref()
-                    // Guess from path extension
-                    .and_then(|path| mime_guess::from_path(path).first_raw())
                     // Take from body, or default to text/plain
                     .unwrap_or(content_type.as_deref().unwrap_or("text/plain")),
             )
@@ -172,6 +185,40 @@ impl Response {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn inferred_content_types_use_frontend_charset_rules() {
+        assert_eq!(
+            content_type_from_path("payload.html").as_deref(),
+            Some("text/html; charset=utf-8")
+        );
+        assert_eq!(
+            content_type_from_path("payload.xml").as_deref(),
+            Some("text/xml; charset=utf-8")
+        );
+        assert_eq!(
+            content_type_from_path("app.config").as_deref(),
+            Some("application/xml; charset=utf-8")
+        );
+        assert_eq!(
+            content_type_from_path("payload.json").as_deref(),
+            Some("application/json")
+        );
+        assert_eq!(
+            content_type_from_path("image.svg").as_deref(),
+            Some("image/svg+xml")
+        );
+    }
+
+    #[tokio::test]
+    async fn explicit_content_type_overrides_inferred_charset() {
+        let mut response: Response = serde_qs::from_str("h[ct]=text/html").unwrap();
+        response.path = Some("payload.html".to_string());
+
+        let response = response.into_response().await;
+
+        assert_eq!(response.headers().get("content-type").unwrap(), "text/html");
+    }
 
     #[tokio::test]
     async fn deserialize() {

@@ -1,29 +1,123 @@
+:root {
+  color-scheme: dark;
+  --bg: #0b0d0c;
+  --surface: #111412;
+  --surface-raised: #171b18;
+  --surface-inset: #0e110f;
+  --border: rgba(231, 255, 239, 0.09);
+  --border-strong: rgba(231, 255, 239, 0.16);
+  --text: #edf4ef;
+  --text-muted: #a2ada6;
+  --text-subtle: #69736d;
+  --accent: #5ee88b;
+  --accent-hover: #76f29c;
+  --accent-muted: rgba(94, 232, 139, 0.38);
+  --danger: #ff7777;
+  --warning: #f6c86c;
+  --radius: 3px;
+  --radius-sm: 3px;
+  --shadow: none;
+  --font-mono: 'Fira Code', 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+  font-family: 'Inter', system-ui, sans-serif;
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  font-synthesis: none;
+}
+
+* {
+  box-sizing: border-box;
+}
+
 html,
+body,
+#app {
+  min-height: 100%;
+  margin: 0;
+}
+
 body {
+  min-width: 320px;
+  color: var(--text);
+  background: var(--bg);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  font-family: 'Inter Variable', 'Inter', sans-serif;
-  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
-  font-weight: 400;
-  margin: 0;
-  min-height: 100%;
-  overflow-x: hidden;
-  overflow-y: auto;
 }
 
-.p-component {
-  font-family: inherit;
+button,
+input,
+select,
+textarea {
+  color: inherit;
+  font: inherit;
 }
 
-hr {
-  border-color: rgba(255, 255, 255, 0.1);
+button,
+select {
+  cursor: pointer;
 }
 
-.text-wrap {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
+button {
+  transition:
+    color 120ms ease,
+    border-color 120ms ease,
+    background 120ms ease,
+    transform 120ms ease,
+    opacity 120ms ease;
 }
 
-.font-bold .p-button-label {
-  font-weight: 700 !important;
+button:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+input,
+select,
+textarea {
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  background: var(--surface-inset);
+  outline: none;
+  transition:
+    border-color 120ms ease,
+    box-shadow 120ms ease,
+    background 120ms ease;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--accent-muted);
+  box-shadow: 0 0 0 3px rgba(94, 232, 139, 0.07);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #515a54;
+}
+
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+::selection {
+  color: #07140c;
+  background: var(--accent);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: 10px;
+  background: #343b36;
+  background-clip: padding-box;
 }
