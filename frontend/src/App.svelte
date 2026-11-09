@@ -6,7 +6,8 @@
   import Icon from '@/components/Icon.svelte'
   import MonacoEditor from '@/components/MonacoEditor.svelte'
   import { buildCsrfFormHtml, parseRequest } from '@/utils/csrfPoc'
-  import { getContentTypeForExtension } from '@/utils/mimeTypes'
+  import { parseGistReference } from '@/utils/gist'
+  import { getContentTypeForExtension, getContentTypeForPath } from '@/utils/mimeTypes'
   import { buildResponsePath } from '@/utils/responseUrl'
   import { SNIPPETS } from '@/utils/snippets'
   import { registerSvgAutocomplete } from '@/utils/svgComplete'
@@ -26,12 +27,15 @@
   const encoder = new TextEncoder()
 
   let code = '<h1>Hello, world!</h1>'
+  let gistUrl = ''
+  let gistTouched = false
   let language = 'html'
   let filename = 'poc.html'
   let status = 200
   let delay = 0
   let headers = [['Content-Type', 'text/html; charset=utf-8']]
   let activePanel = null
+  let previewOpen = false
   let rawHttpRequest = csrfExampleRequest
   let lastGeneratedHttpRequest = null
   let selectedByteCount = 0
@@ -41,9 +45,15 @@
   let copied = false
   let previewUrl = ''
   let previewTimer
+  let copiedTimer
+  const toastTimers = new Map()
 
+  $: gistReference = parseGistReference(gistUrl)
+  $: gistInvalid = gistReference === null
+  $: gistHasUnsupportedFragment = gistUrl.includes('#')
   $: url = buildResponsePath({
     body: code,
+    gist: activePanel === 'gist' ? gistUrl : undefined,
     filename,
     status,
     delay,
@@ -51,14 +61,7 @@
     origin: typeof location === 'undefined' ? 'https://example.com' : location.origin
   })
   $: absoluteUrl = `${typeof location === 'undefined' ? '' : location.origin}${url}`
-  $: previewResponseUrl = buildResponsePath({
-    body: code,
-    filename,
-    status,
-    delay: 0,
-    headers,
-    origin: typeof location === 'undefined' ? 'https://example.com' : location.origin
-  })
+  $: previewResponseUrl = previewOpen ? (delay === 0 ? url : buildPreviewResponsePath()) : ''
   const initialUrl = buildResponsePath({
     body: code,
     filename,
@@ -75,13 +78,26 @@
     : `${totalBytes.toLocaleString()} ${totalBytes === 1 ? 'byte' : 'bytes'}`
   $: csrfGenerateDirty =
     lastGeneratedHttpRequest === null || rawHttpRequest !== lastGeneratedHttpRequest
-  $: if (activePanel === 'preview') schedulePreview(previewResponseUrl)
+  $: if (previewOpen) schedulePreview(previewResponseUrl)
 
   function schedulePreview(nextUrl) {
     clearTimeout(previewTimer)
     previewTimer = setTimeout(() => {
       previewUrl = nextUrl
+      previewTimer = undefined
     }, 180)
+  }
+
+  function buildPreviewResponsePath() {
+    return buildResponsePath({
+      body: code,
+      gist: activePanel === 'gist' ? gistUrl : undefined,
+      filename,
+      status,
+      delay: 0,
+      headers,
+      origin: typeof location === 'undefined' ? 'https://example.com' : location.origin
+    })
   }
 
   function indentationTabsToSpaces(text, tabSize) {
@@ -134,37 +150,40 @@
       : 0
   }
 
-  function disposeEditorListeners() {
-    editorDisposables.forEach((disposable) => disposable.dispose())
+  function disposeEditorResources() {
+    editorDisposables.forEach((disposable) => {
+      if (typeof disposable === 'function') disposable()
+      else disposable.dispose()
+    })
     editorDisposables = []
   }
 
   function handleEditorMount(event) {
     const { editor, monaco } = event.detail
     configureHtmlFormatter(monaco)
+    disposeEditorResources()
 
     // Warm up the language workers before applying the initial language.
     const languageId = editor.getModel().getLanguageId()
     monaco.editor.setModelLanguage(editor.getModel(), 'javascript')
     monaco.editor.setModelLanguage(editor.getModel(), 'css')
     monaco.editor.setModelLanguage(editor.getModel(), languageId)
-    emmetHTML(monaco)
-    emmetCSS(monaco)
     registerSvgEmmet(monaco)
     registerSvgAutocomplete(monaco)
 
-    disposeEditorListeners()
     updateSelectedByteCount(editor)
     editorDisposables = [
+      emmetHTML(monaco),
+      emmetCSS(monaco),
       editor.onDidChangeCursorSelection(() => updateSelectedByteCount(editor)),
-      editor.onDidChangeModelContent(() => updateSelectedByteCount(editor))
+      editor.onDidChangeModelContent(() => updateSelectedByteCount(editor)),
+      monaco.editor.addKeybindingRule({
+        keybinding: monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS,
+        command: 'editor.action.formatDocument',
+        when: 'textInputFocus'
+      })
     ]
 
-    monaco.editor.addKeybindingRule({
-      keybinding: monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS,
-      command: 'editor.action.formatDocument',
-      when: 'textInputFocus'
-    })
     for (const [snippetLanguage, snippets] of Object.entries(SNIPPETS)) {
       for (const [name, snippet] of Object.entries(snippets)) {
         editorDisposables.push(
@@ -195,24 +214,47 @@
       ? filename.replace(/\.[^./]+$/, `.${extension}`)
       : `${filename || 'poc'}.${extension}`
 
-    const contentType = getContentTypeForExtension(extension)
-    if (contentType) {
-      headers = headers.map((row) => [...row])
-      const contentTypeIndex = headers.findIndex(
-        ([name]) => name.trim().toLowerCase() === 'content-type'
-      )
-      if (contentTypeIndex >= 0) headers[contentTypeIndex][1] = contentType
-      else headers.push(['Content-Type', contentType])
-    }
+    setContentType(getContentTypeForExtension(extension))
+  }
+
+  function setContentType(contentType) {
+    if (!contentType) return
+
+    headers = headers.map((row) => [...row])
+    const contentTypeIndex = headers.findIndex(
+      ([name]) => name.trim().toLowerCase() === 'content-type'
+    )
+    if (contentTypeIndex >= 0) headers[contentTypeIndex][1] = contentType
+    else headers.push(['Content-Type', contentType])
+  }
+
+  function setFilename(value) {
+    filename = value.replace(/^\/+/, '')
+    setContentType(getContentTypeForPath(filename))
   }
 
   function updateFilename(event) {
-    filename = event.currentTarget.value.replace(/^\/+/, '')
+    setFilename(event.currentTarget.value)
+  }
+
+  function updateGist(event) {
+    gistTouched = true
+    const reference = parseGistReference(event.currentTarget.value)
+    if (reference?.file) setFilename(reference.file)
   }
 
   function setPanel(panel) {
+    if (panel === 'preview') {
+      previewOpen = !previewOpen
+      if (previewOpen) previewUrl = delay === 0 ? url : buildPreviewResponsePath()
+      else {
+        clearTimeout(previewTimer)
+        previewTimer = undefined
+      }
+      return
+    }
+
     activePanel = activePanel === panel ? null : panel
-    if (activePanel === 'preview') previewUrl = previewResponseUrl
   }
 
   function openResponse() {
@@ -223,7 +265,11 @@
     try {
       await navigator.clipboard.writeText(absoluteUrl)
       copied = true
-      setTimeout(() => (copied = false), 1600)
+      clearTimeout(copiedTimer)
+      copiedTimer = setTimeout(() => {
+        copied = false
+        copiedTimer = undefined
+      }, 1600)
     } catch {
       showToast('Could not copy URL', 'Select the URL and copy it manually.', 'warning', 5000)
     }
@@ -256,10 +302,15 @@
   function showToast(title, detail, type = 'info', life = 5000) {
     const id = nextToastId++
     toasts = [...toasts, { id, title, detail, type }]
-    setTimeout(() => dismissToast(id), life)
+    toastTimers.set(
+      id,
+      setTimeout(() => dismissToast(id), life)
+    )
   }
 
   function dismissToast(id) {
+    clearTimeout(toastTimers.get(id))
+    toastTimers.delete(id)
     toasts = toasts.filter((toast) => toast.id !== id)
   }
 
@@ -306,7 +357,10 @@
 
   onDestroy(() => {
     clearTimeout(previewTimer)
-    disposeEditorListeners()
+    clearTimeout(copiedTimer)
+    toastTimers.forEach((timer) => clearTimeout(timer))
+    toastTimers.clear()
+    disposeEditorResources()
     window.removeEventListener('beforeunload', handleBeforeUnload)
   })
 </script>
@@ -328,27 +382,135 @@
   </header>
 
   <main class="workspace">
-    <section class:panel-open={activePanel} class="editor-card" aria-label="Response body editor">
+    <section
+      class:panel-open={activePanel}
+      class:gist-panel-open={activePanel === 'gist'}
+      class:preview-open={previewOpen}
+      class="editor-card"
+      aria-label="Response body editor"
+    >
       <div class="editor-area">
-        <MonacoEditor bind:value={code} {language} on:mount={handleEditorMount} />
+        <MonacoEditor
+          bind:value={code}
+          {language}
+          readOnly={activePanel === 'gist'}
+          on:mount={handleEditorMount}
+        />
         <span class="byte-count">{byteCountLabel}</span>
       </div>
 
-      {#if activePanel === 'preview'}
+      {#if activePanel === 'csrf'}
+        <div class="subpanel csrf-panel">
+          <div class="csrf-input-wrap">
+            <textarea
+              bind:value={rawHttpRequest}
+              placeholder={csrfRequestPlaceholder}
+              spellcheck="false"
+              aria-label="Raw HTTP request"
+              aria-keyshortcuts="Control+Enter Meta+Enter"
+              on:keydown={handleCsrfKeydown}
+            ></textarea>
+            <button
+              class="primary-button compact csrf-generate-button"
+              class:quiet={!csrfGenerateDirty}
+              type="button"
+              on:click={generateCsrfPoC}
+              title="Generate CSRF PoC (Ctrl+Enter)"
+            >
+              <Icon name="wand" size={15} />
+              <span>Generate</span>
+            </button>
+          </div>
+        </div>
+      {:else if activePanel === 'gist'}
+        <div class="subpanel gist-panel">
+          <div class="gist-panel-header">
+            <div class="gist-panel-copy">
+              <p>
+                Use a <strong>GitHub Gist</strong> instead of the editor contents. This is useful for
+                larger bodies that won't fit in a URL.
+              </p>
+            </div>
+            <a
+              class="create-gist-link"
+              href="https://gist.github.com/"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Create gist
+              <Icon name="external" size={13} />
+            </a>
+          </div>
+          <div class="gist-input-wrap">
+            <div class="gist-input-control">
+              <label class="sr-only" for="gist-url">GitHub gist URL</label>
+              <span class="gist-input-icon"><Icon name="github" size={16} /></span>
+              <input
+                id="gist-url"
+                bind:value={gistUrl}
+                class:has-value={Boolean(gistUrl)}
+                class:invalid={gistTouched && gistInvalid}
+                type="text"
+                inputmode="url"
+                placeholder="https://gist.github.com/user/gist-id"
+                spellcheck="false"
+                aria-invalid={gistInvalid}
+                aria-describedby={gistTouched && gistInvalid
+                  ? 'gist-url-error'
+                  : gistReference
+                    ? 'gist-reference-parts'
+                    : undefined}
+                on:input={updateGist}
+                on:blur={() => (gistTouched = true)}
+              />
+              {#if gistUrl}
+                <button
+                  class="clear-gist-button"
+                  type="button"
+                  on:click={() => (gistUrl = '')}
+                  title="Clear gist URL"
+                  aria-label="Clear gist URL"
+                >
+                  <Icon name="close" size={16} />
+                </button>
+              {/if}
+            </div>
+            {#if gistTouched && gistInvalid}
+              <p id="gist-url-error" class="gist-input-error">
+                {#if gistHasUnsupportedFragment}
+                  URLs with <code>#</code> are unsupported, copy a Raw URL for your specific filename.
+                {:else}
+                  Enter a 32-character Gist ID or URL.
+                {/if}
+              </p>
+            {:else if gistReference}
+              <dl id="gist-reference-parts" class="gist-reference-parts">
+                <div class="gist-reference-part">
+                  <dt>Gist ID</dt>
+                  <dd title={gistReference.id}>{gistReference.id}</dd>
+                </div>
+                {#if gistReference.revision}
+                  <div class="gist-reference-part">
+                    <dt>Revision</dt>
+                    <dd title={gistReference.revision}>{gistReference.revision}</dd>
+                  </div>
+                {/if}
+                {#if gistReference.file}
+                  <div class="gist-reference-part file-part">
+                    <dt>File</dt>
+                    <dd title={gistReference.file}>{gistReference.file}</dd>
+                  </div>
+                {/if}
+              </dl>
+            {/if}
+          </div>
+        </div>
+      {/if}
+
+      {#if previewOpen}
         <div class="subpanel preview-panel">
           <iframe title="Response preview" src={previewUrl} sandbox="allow-scripts allow-forms"
           ></iframe>
-        </div>
-      {:else if activePanel === 'csrf'}
-        <div class="subpanel csrf-panel">
-          <textarea
-            bind:value={rawHttpRequest}
-            placeholder={csrfRequestPlaceholder}
-            spellcheck="false"
-            aria-label="Raw HTTP request"
-            aria-keyshortcuts="Control+Enter Meta+Enter"
-            on:keydown={handleCsrfKeydown}
-          ></textarea>
         </div>
       {/if}
 
@@ -379,29 +541,28 @@
             <Icon name="wand" size={15} />
             <span>CSRF PoC</span>
           </button>
-          {#if activePanel === 'csrf'}
-            <button
-              class="primary-button compact csrf-generate-button"
-              class:quiet={!csrfGenerateDirty}
-              type="button"
-              on:click={generateCsrfPoC}
-              title="Generate CSRF PoC (Ctrl+Enter)"
-            >
-              <Icon name="wand" size={15} />
-              <span>Generate</span>
-            </button>
-          {/if}
+          <button
+            class="tool-button text-button"
+            type="button"
+            on:click={() => setPanel('gist')}
+            class:active={activePanel === 'gist'}
+            title="Use a GitHub gist as the response body"
+            aria-pressed={activePanel === 'gist'}
+          >
+            <Icon name="github" size={15} />
+            <span>Gist</span>
+          </button>
           <button
             class="tool-button preview-button"
-            class:active={activePanel === 'preview'}
+            class:active={previewOpen}
             type="button"
             on:click={() => setPanel('preview')}
             title="Toggle live preview (Ctrl+P)"
             aria-label="Toggle live preview"
             aria-keyshortcuts="Control+P Meta+P"
-            aria-pressed={activePanel === 'preview'}
+            aria-pressed={previewOpen}
           >
-            <Icon name={activePanel === 'preview' ? 'eye' : 'eye-off'} size={17} />
+            <Icon name={previewOpen ? 'eye' : 'eye-off'} size={17} />
           </button>
         </div>
       </div>
@@ -410,6 +571,7 @@
     <aside class="config-card" aria-label="Response configuration">
       <div class="config-content">
         <HeaderEditor bind:headers bind:status />
+        <div class="config-spacer" aria-hidden="true"></div>
       </div>
 
       <section class="delivery" aria-labelledby="delivery-title">
@@ -429,7 +591,7 @@
               />
             </span>
           </label>
-          <label class="compact-field">
+          <label class="compact-field delay-field">
             <span>Delay</span>
             <span class="delay-wrap">
               <Icon name="clock" size={17} />
@@ -462,7 +624,8 @@
         </div>
         {#if urlTooLong}
           <p class="url-warning">
-            This URL is longer than 8,192 characters and may not work everywhere.
+            This URL is longer than 8,192 characters and may not load.
+            <button type="button" on:click={() => setPanel('gist')}>Use a gist instead</button>.
           </p>
         {/if}
       </section>
@@ -574,6 +737,24 @@
 
   .editor-card.panel-open {
     grid-template-rows: minmax(14rem, 1fr) minmax(12rem, 0.62fr) auto;
+  }
+
+  .editor-card.preview-open {
+    grid-template-rows: minmax(14rem, 1fr) minmax(12rem, 0.62fr) auto;
+  }
+
+  .editor-card.panel-open.gist-panel-open {
+    grid-template-rows: minmax(14rem, 1fr) auto auto;
+  }
+
+  .editor-card.panel-open.preview-open {
+    grid-template-rows:
+      minmax(10rem, 1fr) minmax(9rem, 0.45fr) minmax(9rem, 0.62fr)
+      auto;
+  }
+
+  .editor-card.gist-panel-open.preview-open {
+    grid-template-rows: minmax(10rem, 1fr) auto minmax(10rem, 0.62fr) auto;
   }
 
   .config-card {
@@ -825,7 +1006,6 @@
       font-size: 0.8rem;
       font-weight: 800;
     }
-
   }
 
   .tool-button {
@@ -855,14 +1035,12 @@
 
   .tool-button:hover,
   .tool-button.active {
-    border-color: var(--border-strong);
     color: var(--text);
     background: var(--surface-raised);
   }
 
   .tool-button.active {
     color: var(--accent);
-    border-color: var(--accent-muted);
     background: rgba(94, 232, 139, 0.07);
     box-shadow: inset 0 -2px var(--accent);
   }
@@ -912,21 +1090,204 @@
     padding: 0.75rem 0.75rem 0.7rem;
   }
 
+  .gist-panel {
+    display: grid;
+    gap: 0.75rem;
+    padding: 0.9rem 1rem 1rem;
+  }
+
+  .gist-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .gist-panel-copy p {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+    line-height: 1.35;
+  }
+
+  .gist-input-wrap {
+    display: grid;
+    gap: 0.5rem;
+  }
+
+  .gist-input-control {
+    position: relative;
+  }
+
+  .gist-input-wrap input {
+    width: 100%;
+    min-height: 2.5rem;
+    padding: 0.55rem 0.75rem 0.55rem 2.25rem;
+    border-color: var(--border-strong);
+    border-radius: var(--radius-sm);
+    background: #0b0e0c;
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+  }
+
+  .gist-input-wrap input.has-value {
+    padding-right: 2.5rem;
+  }
+
+  .gist-input-wrap input.invalid {
+    border-color: color-mix(in srgb, var(--danger) 65%, transparent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 8%, transparent);
+  }
+
+  .gist-input-error {
+    margin: -0.15rem 0 0;
+    color: var(--danger);
+    font-size: 0.72rem;
+    line-height: 1.35;
+  }
+
+  .gist-reference-parts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    margin: 0;
+  }
+
+  .gist-reference-part {
+    display: grid;
+    flex: 1 1 14rem;
+    min-width: 0;
+    gap: 0.2rem;
+    padding: 0.5rem 0.6rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: color-mix(in srgb, var(--surface-raised) 55%, transparent);
+  }
+
+  .gist-reference-part.file-part {
+    flex-basis: 9rem;
+  }
+
+  .gist-reference-part dt {
+    color: var(--text-subtle);
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    line-height: 1;
+    text-transform: uppercase;
+  }
+
+  .gist-reference-part dd {
+    overflow: hidden;
+    margin: 0;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    line-height: 1.35;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .gist-input-icon {
+    position: absolute;
+    z-index: 1;
+    top: 50%;
+    left: 0.75rem;
+    display: grid;
+    color: var(--text-subtle);
+    pointer-events: none;
+    transform: translateY(-50%);
+  }
+
+  .create-gist-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    min-height: 2rem;
+    margin-right: -0.5rem;
+    padding: 0.35rem 0.5rem;
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    font-size: 0.78rem;
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+
+  .create-gist-link:hover {
+    color: var(--accent);
+    background: var(--interactive-hover);
+  }
+
+  .clear-gist-button {
+    position: absolute;
+    z-index: 1;
+    top: 50%;
+    right: 0.35rem;
+    display: grid;
+    width: 1.8rem;
+    height: 1.8rem;
+    justify-content: center;
+    place-items: center;
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-sm);
+    color: var(--text-subtle);
+    background: transparent;
+    transform: translateY(-50%);
+  }
+
+  .clear-gist-button:hover {
+    color: var(--text);
+    background: var(--interactive-hover);
+  }
+
+  .csrf-input-wrap {
+    position: relative;
+    min-height: 0;
+  }
+
   .csrf-panel textarea {
     width: 100%;
+    height: 100%;
     min-height: 5rem;
-    padding: 0.7rem;
+    padding: 0.7rem 0.7rem 3.8rem;
     resize: none;
     font-family: var(--font-mono);
     font-size: 0.9rem;
     line-height: 1.5;
   }
 
+  .csrf-panel .csrf-generate-button {
+    position: absolute;
+    right: 0.65rem;
+    bottom: 0.65rem;
+    min-height: 2.35rem;
+    font-size: 0.82rem;
+  }
+
+  .csrf-panel .csrf-generate-button.quiet {
+    background: var(--surface-raised);
+  }
+
+  .csrf-panel .csrf-generate-button.quiet:hover {
+    border-color: var(--border-strong);
+    color: var(--text);
+    background: #202521;
+  }
+
   .config-content {
+    display: flex;
     flex: 1;
+    flex-direction: column;
     min-height: 0;
-    padding: 0 0 1.5rem;
     overflow-y: auto;
+  }
+
+  .config-spacer {
+    flex: 1;
+    min-height: 1.5rem;
+    user-select: none;
   }
 
   .input-prefix-wrap,
@@ -1074,6 +1435,20 @@
     line-height: 1.4;
   }
 
+  .url-warning button {
+    padding: 0;
+    border: 0;
+    color: inherit;
+    background: transparent;
+    font-size: inherit;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  .url-warning button:hover {
+    color: var(--text);
+  }
+
   .primary-button {
     display: inline-flex;
     align-items: center;
@@ -1105,28 +1480,6 @@
     background: var(--surface-raised);
   }
 
-  .editor-actions .csrf-generate-button {
-    flex: none;
-    height: 100%;
-    min-height: 0;
-    padding: 0 0.85rem;
-    border: 0;
-    border-right: 1px solid var(--border);
-    border-radius: 0;
-    font-size: 0.82rem;
-  }
-
-  .editor-actions .csrf-generate-button.quiet {
-    border-color: var(--border);
-    background: transparent;
-  }
-
-  .editor-actions .csrf-generate-button.quiet:hover {
-    border-color: var(--border-strong);
-    color: var(--text);
-    background: var(--surface-raised);
-  }
-
   .delivery-options {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
@@ -1146,6 +1499,10 @@
 
   .compact-field input {
     font-weight: 400;
+  }
+
+  .delay-field {
+    gap: 0.4rem;
   }
 
   .path-field {
@@ -1318,14 +1675,12 @@
   }
 
   @media (max-width: 440px) {
-    .tool-button.text-button,
-    .editor-actions .csrf-generate-button {
+    .tool-button.text-button {
       width: 2.75rem;
       padding: 0;
     }
 
-    .tool-button.text-button span,
-    .csrf-generate-button span {
+    .tool-button.text-button span {
       display: none;
     }
   }

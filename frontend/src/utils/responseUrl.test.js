@@ -46,6 +46,23 @@ test('preserves duplicate response headers', () => {
   assert.equal(path, '/?body=ok&h[c]=a%3D1&h[c]=b%3D2')
 })
 
+test('uses a gist URL instead of an inline body', () => {
+  const path = buildResponsePath({
+    body: '<h1>This should not be included</h1>',
+    gist: '  https://gist.github.com/user/0123456789abcdef0123456789abcdef  ',
+    filename: 'poc.html'
+  })
+
+  assert.equal(
+    path,
+    '/poc.html?gist=https%3A%2F%2Fgist%2Egithub%2Ecom%2Fuser%2F0123456789abcdef0123456789abcdef'
+  )
+})
+
+test('uses gist mode even when the gist URL is empty', () => {
+  assert.equal(buildResponsePath({ body: 'editor contents', gist: '' }), '/?gist=')
+})
+
 test('percent-encodes every non-alphanumeric query byte', () => {
   assert.equal(
     encodeQueryComponent("AZaz09 -_.!~*'() /🌍"),

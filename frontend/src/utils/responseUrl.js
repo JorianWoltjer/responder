@@ -16,6 +16,7 @@ export function encodeQueryComponent(value) {
 
 export function buildResponsePath({
   body,
+  gist,
   filename = '',
   status = 200,
   delay = 0,
@@ -27,7 +28,8 @@ export function buildResponsePath({
   const query = []
   const addParameter = (name, value) => query.push(`${name}=${encodeQueryComponent(String(value))}`)
 
-  if (body) addParameter('body', body)
+  if (gist !== undefined) addParameter('gist', String(gist).trim())
+  else if (body) addParameter('body', body)
 
   if (status !== 200) addParameter('status', status)
   if (delay > 0) addParameter('delay', delay)

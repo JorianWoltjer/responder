@@ -22,6 +22,9 @@ pub mod response;
 
 type Err = Box<dyn error::Error>;
 
+/// Maximum size of a Gist API response or raw Gist file (10 MiB).
+const MAX_GIST_SIZE_BYTES: usize = 10 * 1024 * 1024;
+
 static GIST_ID_REGEX: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)(^|\W)([a-f0-9]{32})(\W|$)").expect("gist ID regex is valid")
 });
@@ -69,6 +72,45 @@ fn parse_gist_reference(url: &str) -> Result<GistReference, Err> {
         revision,
         file,
     })
+}
+
+fn ensure_gist_size(size: u64) -> Result<(), Err> {
+    if size > MAX_GIST_SIZE_BYTES as u64 {
+        return Err(format!(
+            "Gist content exceeds the maximum size of {MAX_GIST_SIZE_BYTES} bytes"
+        )
+        .into());
+    }
+
+    Ok(())
+}
+
+fn append_gist_chunk(content: &mut Vec<u8>, chunk: &[u8]) -> Result<(), Err> {
+    let size = content
+        .len()
+        .checked_add(chunk.len())
+        .ok_or("Gist content size overflow")?;
+    ensure_gist_size(size as u64)?;
+    content.extend_from_slice(chunk);
+    Ok(())
+}
+
+async fn read_gist_response(mut response: reqwest::Response) -> Result<Vec<u8>, Err> {
+    if let Some(size) = response.content_length() {
+        ensure_gist_size(size)?;
+    }
+
+    let capacity = response
+        .content_length()
+        .and_then(|size| usize::try_from(size).ok())
+        .unwrap_or_default()
+        .min(MAX_GIST_SIZE_BYTES);
+    let mut content = Vec::with_capacity(capacity);
+    while let Some(chunk) = response.chunk().await? {
+        append_gist_chunk(&mut content, &chunk)?;
+    }
+
+    Ok(content)
 }
 
 pub async fn index(request: Request) -> Result<axum::response::Response, StatusCode> {
@@ -137,7 +179,8 @@ pub async fn get_gist_content(url: &str) -> Result<(Vec<u8>, Option<String>), Er
         .get(ETAG)
         .and_then(|etag| etag.to_str().ok())
         .map(str::to_string);
-    let files = response.json::<serde_json::Value>().await?;
+    let response_body = read_gist_response(response).await?;
+    let files = serde_json::from_slice::<serde_json::Value>(&response_body)?;
     let files = files
         .get("files")
         .ok_or("files key found")?
@@ -148,16 +191,24 @@ pub async fn get_gist_content(url: &str) -> Result<(Vec<u8>, Option<String>), Er
         Some(file) if files.contains_key(&file) => files.get(&file).ok_or("No file found")?,
         _ => files.values().next().ok_or("No files found")?,
     };
-    let content = file
-        .get("content")
-        .ok_or("No content found")?
-        .as_str()
-        .ok_or("Content not a string")?;
+    if let Some(size) = file.get("size").and_then(serde_json::Value::as_u64) {
+        ensure_gist_size(size)?;
+    }
+    let raw_url = file
+        .get("raw_url")
+        .and_then(serde_json::Value::as_str)
+        .ok_or("No raw URL found")?;
     let content_type = file
         .get("type")
         .and_then(|t| t.as_str().map(|s| s.to_string()));
 
-    let content = content.as_bytes().to_vec();
+    let raw_response = client
+        .get(raw_url)
+        .header("User-Agent", "responder")
+        .send()
+        .await?
+        .error_for_status()?;
+    let content = read_gist_response(raw_response).await?;
     GIST_CACHE.write().await.insert(
         cache_key,
         CachedGist {
@@ -266,5 +317,23 @@ mod tests {
                 file: Some("payload.html".to_string()),
             }
         );
+    }
+
+    #[test]
+    fn gist_size_limit_allows_exact_limit_and_rejects_larger_sizes() {
+        assert!(ensure_gist_size(MAX_GIST_SIZE_BYTES as u64).is_ok());
+        assert!(ensure_gist_size(MAX_GIST_SIZE_BYTES as u64 + 1).is_err());
+    }
+
+    #[test]
+    fn gist_size_limit_is_enforced_across_chunks() {
+        let mut content = vec![0; MAX_GIST_SIZE_BYTES - 2];
+
+        append_gist_chunk(&mut content, &[1, 2]).unwrap();
+        assert_eq!(content.len(), MAX_GIST_SIZE_BYTES);
+
+        let error = append_gist_chunk(&mut content, &[3]).unwrap_err();
+        assert!(error.to_string().contains("maximum size"));
+        assert_eq!(content.len(), MAX_GIST_SIZE_BYTES);
     }
 }

@@ -15,36 +15,44 @@
   export let status
 
   $: corsEnabled = hasCORS(headers)
-  let rows = [...Array.from(headers, (row) => [...row]), ['', '']]
+  let nextRowId = 1
+  let rows = [...Array.from(headers, (values) => createRow(values)), createRow()]
   let lastHeaders = headers
   let tableBody
 
   $: syncExternalHeaders(headers)
 
+  function createRow(values = ['', ''], id = nextRowId++) {
+    return { id, values: [...values] }
+  }
+
   function syncExternalHeaders(nextHeaders) {
     if (nextHeaders === lastHeaders) return
-    const draft = rows.at(-1) ?? ['', '']
-    rows = [...Array.from(nextHeaders, (row) => [...row]), draft[0].trim() ? ['', ''] : draft]
+    const draft = rows.at(-1) ?? createRow()
+    const nextRows = Array.from(nextHeaders, (values, index) =>
+      createRow(values, index < rows.length - 1 ? rows[index].id : undefined)
+    )
+    rows = [...nextRows, draft.values[0].trim() ? createRow() : draft]
     lastHeaders = nextHeaders
   }
 
   function publish(nextRows) {
     rows = nextRows
-    const nextHeaders = nextRows.filter(([name]) => name.trim()).map((row) => [...row])
+    const nextHeaders = nextRows.filter((row) => row.values[0].trim()).map((row) => [...row.values])
     lastHeaders = nextHeaders
     headers = nextHeaders
   }
 
   function updateRow(index, field, value) {
-    const next = rows.map((row) => [...row])
-    next[index][field] = value
-    if (index === next.length - 1 && next[index][0].trim()) next.push(['', ''])
+    const next = rows.map((row) => ({ ...row, values: [...row.values] }))
+    next[index].values[field] = value
+    if (index === next.length - 1 && next[index].values[0].trim()) next.push(createRow())
     publish(next)
   }
 
   function cleanRows() {
-    const draft = rows.at(-1) ?? ['', '']
-    publish([...rows.slice(0, -1).filter(([name]) => name.trim()), draft])
+    const draft = rows.at(-1) ?? createRow()
+    publish([...rows.slice(0, -1).filter((row) => row.values[0].trim()), draft])
   }
 
   function removeRow(index) {
@@ -78,13 +86,13 @@
   }
 
   function toggleCors() {
-    let next = Array.from(headers, (row) => [...row])
+    let next = Array.from(headers, (values, index) => createRow(values, rows[index]?.id))
     if (corsEnabled) {
-      next = next.filter(([name]) => !Object.hasOwn(CORS_HEADERS, name))
+      next = next.filter((row) => !Object.hasOwn(CORS_HEADERS, row.values[0]))
     } else {
-      next.push(...Object.entries(CORS_HEADERS))
+      next.push(...Object.entries(CORS_HEADERS).map((values) => createRow(values)))
     }
-    const draft = rows.at(-1) ?? ['', '']
+    const draft = rows.at(-1) ?? createRow()
     publish([...next, draft])
   }
 </script>
@@ -113,9 +121,9 @@
       <span>Name</span><span>Value</span><span></span>
     </div>
     <div class="table-body" bind:this={tableBody}>
-      {#each rows as row, index (index)}
-        {@const valueExample = getHttpHeaderExample(row[0])}
-        {@const valueSuggestions = getHttpHeaderValues(row[0])}
+      {#each rows as row, index (row.id)}
+        {@const valueExample = getHttpHeaderExample(row.values[0])}
+        {@const valueSuggestions = getHttpHeaderValues(row.values[0])}
         {@const isInputRow = index === rows.length - 1}
         <div class="header-row">
           <input
@@ -125,7 +133,7 @@
             aria-label={`Header ${index + 1} name`}
             list="header-names"
             placeholder={isInputRow ? 'Add header…' : 'Header name'}
-            value={row[0]}
+            value={row.values[0]}
             on:input={(event) => updateRow(index, 0, event.currentTarget.value)}
             on:keydown={(event) => acceptDatalistAndAdvance(event, index, 0)}
             on:blur={cleanRows}
@@ -137,7 +145,7 @@
             aria-label={`Header ${index + 1} value`}
             list={valueSuggestions.length ? `header-values-${index}` : undefined}
             placeholder={valueExample || 'Value'}
-            value={row[1]}
+            value={row.values[1]}
             on:input={(event) => updateRow(index, 1, event.currentTarget.value)}
             on:keydown={(event) => acceptDatalistAndAdvance(event, index, 1)}
             on:blur={cleanRows}
@@ -151,8 +159,8 @@
           {/if}
         </div>
       {/each}
-      {#each rows as row, index (index)}
-        {@const docsUrl = getHttpHeaderDocsUrl(row[0])}
+      {#each rows as row, index (row.id)}
+        {@const docsUrl = getHttpHeaderDocsUrl(row.values[0])}
         {@const isInputRow = index === rows.length - 1}
         <div
           class="row-actions"
@@ -167,7 +175,7 @@
               target="_blank"
               rel="noreferrer"
               title="Read documentation on MDN"
-              aria-label={`Read ${row[0]} documentation on MDN`}
+              aria-label={`Read ${row.values[0]} documentation on MDN`}
             >
               <Icon name="book" size={16} />
             </a>
@@ -177,7 +185,7 @@
               class="remove-button"
               type="button"
               title="Remove header"
-              aria-label={`Remove ${row[0] || 'header'}`}
+              aria-label={`Remove ${row.values[0] || 'header'}`}
               on:click={() => removeRow(index)}
             >
               <Icon name="trash" size={15} />

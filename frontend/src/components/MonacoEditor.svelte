@@ -9,6 +9,7 @@
 
   export let value = ''
   export let language = 'html'
+  export let readOnly = false
 
   const dispatch = createEventDispatcher()
   self.MonacoEnvironment = {
@@ -35,6 +36,7 @@
       editor = monaco.editor.create(container, {
         value,
         language,
+        readOnly,
         theme: 'vs-dark',
         automaticLayout: true,
         autoIndent: 'full',
@@ -86,10 +88,12 @@
   $: if (editor && editor.getModel()?.getLanguageId() !== language) {
     monaco.editor.setModelLanguage(editor.getModel(), language)
   }
+
+  $: if (editor) editor.updateOptions({ readOnly })
 </script>
 
-<div class="editor-shell">
-  <div class="editor" bind:this={container}></div>
+<div class="editor-shell" class:read-only={readOnly} aria-disabled={readOnly}>
+  <div class="editor" bind:this={container} inert={readOnly}></div>
   {#if loading}
     <div class="editor-state">
       <span class="spinner"></span>
@@ -97,6 +101,10 @@
     </div>
   {:else if loadError}
     <div class="editor-state error">{loadError}. Check your connection and reload.</div>
+  {:else if readOnly}
+    <div class="editor-disabled" role="status">
+      <span>Using gist instead of editor</span>
+    </div>
   {/if}
 </div>
 
@@ -121,6 +129,32 @@
 
   .editor-state.error {
     color: var(--danger);
+  }
+
+  .editor-shell.read-only .editor {
+    opacity: 0.38;
+    filter: grayscale(0.65);
+  }
+
+  .editor-disabled {
+    position: absolute;
+    z-index: 10;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    color: var(--text-muted);
+    background: rgba(11, 13, 12, 0.38);
+    font-size: 0.8rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    cursor: not-allowed;
+  }
+
+  .editor-disabled span {
+    padding: 0.5rem 0.7rem;
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    background: var(--surface-raised);
   }
 
   .spinner {
