@@ -15,7 +15,6 @@ mime_guess = "2.0.5"
 [dependencies]
 axum = { version = "0.8.9", features = ["macros"] }
 b64 = "0.4.0"
-lazy_static = "1.5.1"
 mime_guess.workspace = true
 regex = "1.13.1"
 reqwest = { version = "0.13.5", features = ["json"] }

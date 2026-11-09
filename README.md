@@ -6,17 +6,18 @@
 
 [<img width="775px" src="https://repository-images.githubusercontent.com/772139514/aa4b36fe-a57f-4e1c-8551-d244449c68e6" alt="Screenshot of default main web UI">](https://r.jtw.sh/)
 
-Ever wanted to create an easy-to-share Proof of Concept, but realized your exploit need a special header here, another special status code there, and oh yeah, you forgot *Cross-Origin Resource Sharing* again. No more!  
+Ever wanted to create an easy-to-share proof of concept, but realized your exploit needs a special header here, another special status code there, and, oh yeah, you forgot *Cross-Origin Resource Sharing* again? No more!
 With Responder, you have a super quick **web UI** that generates a permanent URL that will always respond correctly. **Query parameters** tell it what body to use, what headers to set, and what status code to use. This way, nothing is stored and nothing can be lost, you just share the URL. With the quick preview options, you can even use this **while developing** your exploit.
 
 ## Features
 
 * **Respond on any path**: Every pathname will lead to the same parser and respond in the expected way. By setting a filename extension like `.html`, it automatically guesses the `Content-Type` header if it wasn't overwritten manually.
-* **Set body data**: Use the `?body=` parameter to set an content body, or use the shorthand `?body.b64=` to decode from raw Base64 instead.
-* **Set exact response headers**: Use the `?h[Header-Name]=` parameter multiple times to set any amount of headers for the response. There are some shorthands like `?h[ct]=` for `Content-Type`, or `?h[l]` for Location. Lastly, the `?cors` paramter alone will set all wildcard [Cross-Origin Resource Sharing](https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS) headers to make sure cross-site requests can read the content.
+* **Set body data**: Use the `?body=` parameter to set a response body, or use the shorthand `?body.b64=` to decode raw Base64 instead.
+* **Set exact response headers**: Use the `?h[Header-Name]=` parameter multiple times to set any number of response headers, including duplicate headers such as `Set-Cookie`. There are also shorthands such as `?h[ct]=` for `Content-Type` and `?h[l]=` for `Location`. Lastly, the `?cors` parameter alone sets wildcard [Cross-Origin Resource Sharing](https://developer.mozilla.org/en-US/docs/Web/HTTP/CORS) headers so cross-site requests can read the content.
 * **Status code**: Use the `?status=` parameter to set the [response status code](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status)
 * **Delayed responses**: Use the `?delay=` parameter to delay the response server-side (maximum 5 minutes). Values are in milliseconds by default; suffix `s` means seconds and `m` means minutes (e.g. `?delay=0.2s`, `?delay=1m`).
-* **Gist fetching**: For large bodies that won't fit in a URL, you can [create a gist](https://gist.github.com/) and put the URL in the `?gist=` parameter. This will fetch the gists raw content and return it as the body, with any custom headers/status you set.
+* **Gist fetching**: For large bodies that won't fit in a URL, you can [create a gist](https://gist.github.com/) and put its URL in the `?gist=` parameter. Responder revalidates cached content with GitHub on every request, so changes are available immediately. Revision URLs such as `https://gist.github.com/user/id/revisions/revision` are supported when the response must stay pinned to a specific version.
+* **Keyboard shortcuts**: <kbd>Ctrl</kbd> + <kbd>Enter</kbd> to submit, <kbd>Ctrl</kbd> + <kbd>P</kbd> toggles the preview, <kbd>Ctrl</kbd> + <kbd>S</kbd> formats the editor, <kbd>Ctrl</kbd> + <kbd>Space</kbd> lists [snippets](./frontend/src/utils/snippets.js), and <kbd>Enter</kbd> for accepting suggestions.
 
 ## FAQ
 
@@ -29,12 +30,12 @@ If you have any other questions, feel free to ask in an [Issue](https://github.c
 ## Privacy & Self-Hosting
 
 > [!WARNING]  
-> Because this tool is hosted on my own domain, I will technically be able to view any traffic going to and from my server. Keep this in mind when creating PoC's for real-world scenarios and consider self-hosting it on a server you control.
+> Because this tool is hosted on my own domain, I can technically view traffic going to and from my server. Keep this in mind when creating PoCs for real-world scenarios, and consider self-hosting it on a server you control.
 
 The docker image is updated at [docker.io/j0r1an/responder](https://hub.docker.com/r/j0r1an/responder), and can be **run** using the following command:
 
 ```bash
-docker run --rm -p 8000:80 j0r1an/responder:latest
+docker run --rm -p 8000:8080 j0r1an/responder:latest
 ```
 
 <!-- Push:
@@ -44,13 +45,13 @@ docker push j0r1an/responder:latest
 
 ---
 
-If you instead want to **build from source code** yourself, clone this Github repository (optionally configure the listening port in [`docker-compose.yml`](docker-compose.yml#L5)), then run the following command:
+If you instead want to **build from source**, clone this GitHub repository (optionally configure the listening port in [`docker-compose.yml`](docker-compose.yml#L5)), then run the following command:
 
 ```bash
 docker compose up --build -d
 ```
 
-The application will be available on http://localhost:8000. Since the main use case is making it publicly accessible your site, it is recommended to put this behind a **reverse proxy** like the following Nginx configuration:
+The application will be available at http://localhost:8000. Since the main use case is making it publicly accessible, it is recommended to put it behind a **reverse proxy** such as the following Nginx configuration:
 
 ```conf
 server {
@@ -63,4 +64,4 @@ server {
 }
 ```
 
-**Be careful on which domain you publicly host this tool**. The domain must not host any other applications that rely only on SameSite for CSRF protection ([read more](https://book.jorianwoltjer.com/web/cross-site-request-forgery-csrf)). This application is vulnerable to XSS by design, so it may be abused to send same-site requests with authentication.
+**Be careful which domain you use to host this tool publicly**. The domain must not host any other applications that rely only on SameSite for CSRF protection ([read more](https://book.jorianwoltjer.com/web/cross-site-request-forgery-csrf)). This application is vulnerable to XSS by design, so it may be abused to send authenticated same-site requests.

@@ -26,3 +26,18 @@ test('returns to SVG completion after the XHTML namespace closes', () => {
   assert.ok(suggestions.some((item) => item.label === 'rect' && item.detail === 'SVG'))
   assert.ok(!suggestions.some((item) => item.detail === 'HTML'))
 })
+
+test('does not treat SVG-looking comments or scripts as SVG context', () => {
+  assert.deepEqual(complete('<!-- <svg> --><re', { language: 'html' }), [])
+  assert.deepEqual(complete('<script>const value = "<svg>"; re', { language: 'html' }), [])
+})
+
+test('offers SVG completion inside HTML SVG but HTML integration points are excluded', () => {
+  assert.ok(complete('<main><svg><re', { language: 'html' }).some((item) => item.label === 'rect'))
+  assert.deepEqual(
+    complete('<svg><foreignObject><di', { language: 'html' }).filter(
+      (item) => item.label !== 'svg'
+    ),
+    []
+  )
+})

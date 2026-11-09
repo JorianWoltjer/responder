@@ -5,10 +5,10 @@
   import HeaderEditor from '@/components/HeaderEditor.svelte'
   import Icon from '@/components/Icon.svelte'
   import MonacoEditor from '@/components/MonacoEditor.svelte'
-  import { SNIPPETS } from '@/utils'
   import { buildCsrfFormHtml, parseRequest } from '@/utils/csrfPoc'
   import { getContentTypeForExtension } from '@/utils/mimeTypes'
   import { buildResponsePath } from '@/utils/responseUrl'
+  import { SNIPPETS } from '@/utils/snippets'
   import { registerSvgAutocomplete } from '@/utils/svgComplete'
   import { registerSvgEmmet } from '@/utils/svgEmmet'
 
@@ -30,7 +30,7 @@
   let filename = 'poc.html'
   let status = 200
   let delay = 0
-  let headers = new Map([['Content-Type', 'text/html; charset=utf-8']])
+  let headers = [['Content-Type', 'text/html; charset=utf-8']]
   let activePanel = null
   let rawHttpRequest = csrfExampleRequest
   let lastGeneratedHttpRequest = null
@@ -41,7 +41,6 @@
   let copied = false
   let previewUrl = ''
   let previewTimer
-  let dirty = false
 
   $: url = buildResponsePath({
     body: code,
@@ -52,13 +51,31 @@
     origin: typeof location === 'undefined' ? 'https://example.com' : location.origin
   })
   $: absoluteUrl = `${typeof location === 'undefined' ? '' : location.origin}${url}`
+  $: previewResponseUrl = buildResponsePath({
+    body: code,
+    filename,
+    status,
+    delay: 0,
+    headers,
+    origin: typeof location === 'undefined' ? 'https://example.com' : location.origin
+  })
+  const initialUrl = buildResponsePath({
+    body: code,
+    filename,
+    status,
+    delay,
+    headers,
+    origin: typeof location === 'undefined' ? 'https://example.com' : location.origin
+  })
+  $: dirty = url !== initialUrl
+  $: urlTooLong = url.length > 8192
   $: totalBytes = encoder.encode(code).length
   $: byteCountLabel = selectedByteCount
     ? `${selectedByteCount.toLocaleString()} / ${totalBytes.toLocaleString()} bytes`
     : `${totalBytes.toLocaleString()} ${totalBytes === 1 ? 'byte' : 'bytes'}`
   $: csrfGenerateDirty =
     lastGeneratedHttpRequest === null || rawHttpRequest !== lastGeneratedHttpRequest
-  $: if (activePanel === 'preview') schedulePreview(url)
+  $: if (activePanel === 'preview') schedulePreview(previewResponseUrl)
 
   function schedulePreview(nextUrl) {
     clearTimeout(previewTimer)
@@ -73,7 +90,7 @@
   }
 
   function configureHtmlFormatter(monaco) {
-    const { htmlDefaults } = monaco.languages.html
+    const { htmlDefaults } = monaco.html
     htmlDefaults.setOptions({
       ...htmlDefaults.options,
       format: { ...htmlDefaults.options.format, tabSize: 2, insertSpaces: true }
@@ -148,14 +165,6 @@
       command: 'editor.action.formatDocument',
       when: 'textInputFocus'
     })
-    editor.addAction({
-      id: 'open-response-url',
-      label: 'Open response URL',
-      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter],
-      precondition: 'textInputFocus',
-      run: openResponse
-    })
-
     for (const [snippetLanguage, snippets] of Object.entries(SNIPPETS)) {
       for (const [name, snippet] of Object.entries(snippets)) {
         editorDisposables.push(
@@ -188,8 +197,12 @@
 
     const contentType = getContentTypeForExtension(extension)
     if (contentType) {
-      headers = new Map(headers)
-      headers.set('Content-Type', contentType)
+      headers = headers.map((row) => [...row])
+      const contentTypeIndex = headers.findIndex(
+        ([name]) => name.trim().toLowerCase() === 'content-type'
+      )
+      if (contentTypeIndex >= 0) headers[contentTypeIndex][1] = contentType
+      else headers.push(['Content-Type', contentType])
     }
   }
 
@@ -199,7 +212,7 @@
 
   function setPanel(panel) {
     activePanel = activePanel === panel ? null : panel
-    if (activePanel === 'preview') previewUrl = url
+    if (activePanel === 'preview') previewUrl = previewResponseUrl
   }
 
   function openResponse() {
@@ -254,12 +267,21 @@
     event.currentTarget.select()
   }
 
-  function handleInteraction() {
-    dirty = true
-  }
-
   function handleKeydown(event) {
-    handleInteraction()
+    if (
+      (event.ctrlKey || event.metaKey) &&
+      !event.altKey &&
+      !event.shiftKey &&
+      event.key === 'Enter'
+    ) {
+      if (event.target?.closest?.('.csrf-panel textarea')) return
+
+      event.preventDefault()
+      event.stopPropagation()
+      if (!event.repeat) setTimeout(openResponse, 0)
+      return
+    }
+
     if (
       (!event.ctrlKey && !event.metaKey) ||
       event.altKey ||
@@ -289,7 +311,7 @@
   })
 </script>
 
-<svelte:window on:input={handleInteraction} on:keydown|capture={handleKeydown} />
+<svelte:window on:keydown|capture={handleKeydown} />
 
 <div class="app-shell">
   <header class="site-header">
@@ -334,10 +356,16 @@
         <div class="editor-actions">
           <label class="language-select">
             <span class="sr-only">Language</span>
-            <Icon name="code" size={15} />
-            <select bind:value={language} on:change={changeLanguage}>
+            <Icon name="code" size={17} />
+            <select class="syntax-select" bind:value={language} on:change={changeLanguage}>
+              <button type="button">
+                <selectedcontent></selectedcontent>
+              </button>
+              <div class="syntax-options-header" aria-hidden="true">LANGUAGE</div>
               {#each languages as item (item.value)}
-                <option value={item.value}>{item.label}</option>
+                <option class="language-option" value={item.value}>
+                  <span class="language-label">{item.label}</span>
+                </option>
               {/each}
             </select>
           </label>
@@ -404,7 +432,7 @@
           <label class="compact-field">
             <span>Delay</span>
             <span class="delay-wrap">
-              <Icon name="clock" size={15} />
+              <Icon name="clock" size={17} />
               <input
                 bind:value={delay}
                 type="number"
@@ -432,6 +460,11 @@
             <Icon name="external" size={15} />
           </button>
         </div>
+        {#if urlTooLong}
+          <p class="url-warning">
+            This URL is longer than 8,192 characters and may not work everywhere.
+          </p>
+        {/if}
       </section>
     </aside>
   </main>
@@ -460,23 +493,23 @@
 
 <style>
   .app-shell {
-    width: min(1540px, 100%);
+    width: 100%;
+    max-width: none;
     min-height: 100vh;
     margin: 0 auto;
-    padding: 0 1.5rem 1.5rem;
+    padding: 0 2rem 2rem;
   }
 
   .site-header {
-    display: grid;
-    grid-template-columns: 1fr auto 1fr;
+    display: flex;
     align-items: center;
-    height: 4.5rem;
+    height: 5.5rem;
   }
 
   .brand {
     display: inline-flex;
     align-items: center;
-    gap: 0.65rem;
+    gap: 0.75rem;
     width: fit-content;
     color: inherit;
     text-decoration: none;
@@ -484,12 +517,12 @@
 
   .brand-mark {
     display: grid;
-    width: 1.85rem;
-    height: 1.85rem;
+    width: auto;
+    height: auto;
     place-items: center;
-    border: 1px solid var(--border-strong);
-    border-radius: 7px;
-    background: var(--surface-raised);
+    border: 0;
+    border-radius: 0;
+    background: transparent;
     transition: transform 180ms ease;
   }
 
@@ -498,60 +531,77 @@
   }
 
   .brand-mark img {
-    width: 1.15rem;
-    height: 1.15rem;
+    width: 2rem;
+    height: 2rem;
   }
 
   .brand-name {
-    font-size: 0.95rem;
+    color: var(--accent);
+    font-size: 2rem;
     font-weight: 720;
     letter-spacing: -0.025em;
+    transition: color 160ms ease;
+  }
+
+  .brand:hover .brand-name {
+    color: var(--accent-hover);
   }
 
   .workspace {
     display: grid;
-    grid-template-columns: minmax(0, 1.22fr) minmax(24rem, 0.78fr);
-    gap: 1rem;
-    min-height: calc(100vh - 6rem);
+    grid-template-columns: minmax(0, 1fr) minmax(28rem, 1fr);
+    gap: 2rem;
+    min-height: calc(100vh - 7.5rem);
   }
 
   .editor-card,
   .config-card {
     overflow: hidden;
     min-width: 0;
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    background: var(--surface);
-    box-shadow: var(--shadow);
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
   }
 
   .editor-card {
     display: grid;
-    grid-template-rows: auto minmax(20rem, 1fr) auto;
+    grid-template-rows: minmax(0, 1fr) auto;
+    height: calc(100vh - 7.5rem);
     min-height: 40rem;
+    border: 1px solid var(--border-strong);
   }
 
   .editor-card.panel-open {
-    grid-template-rows: auto minmax(14rem, 1fr) minmax(11rem, 0.58fr) auto;
+    grid-template-rows: minmax(14rem, 1fr) minmax(12rem, 0.62fr) auto;
   }
 
   .config-card {
     display: flex;
     flex-direction: column;
+    height: calc(100vh - 7.5rem);
+    min-height: 40rem;
+    padding-left: 2rem;
+    border-left: 1px solid var(--border);
+    overflow-y: auto;
   }
 
   .card-bar {
-    min-height: 3.55rem;
+    min-height: 4rem;
     border-bottom: 1px solid var(--border);
-    background: rgba(255, 255, 255, 0.012);
+    background: transparent;
   }
 
   .editor-bar {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    padding: 0.55rem 0.75rem 0.55rem 1rem;
+    align-items: stretch;
+    justify-content: flex-start;
+    gap: 0;
+    height: 3.25rem;
+    min-height: 3.25rem;
+    padding: 0;
+    border-top: 1px solid var(--border);
+    border-bottom: 0;
   }
 
   .editor-actions,
@@ -562,7 +612,10 @@
   }
 
   .editor-actions {
-    gap: 0.35rem;
+    align-items: stretch;
+    width: 100%;
+    height: 100%;
+    gap: 0;
   }
 
   .language-select {
@@ -570,13 +623,14 @@
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
     gap: 0.55rem;
-    height: 2.75rem;
-    padding-left: 0.75rem;
-    border: 1px solid var(--border-strong);
-    border-radius: var(--radius-sm);
+    min-width: 10.5rem;
+    height: 100%;
+    padding-left: 1rem;
+    border: 0;
+    border-right: 1px solid var(--border);
+    border-radius: 0;
     color: var(--text-muted);
-    background: var(--surface-raised);
-    background: color-mix(in srgb, var(--surface-raised) 82%, var(--surface-inset));
+    background: transparent;
     transition:
       border-color 140ms ease,
       background 140ms ease,
@@ -598,18 +652,20 @@
   }
 
   .language-select:hover {
-    border-color: rgba(231, 255, 239, 0.28);
+    border-color: var(--border-strong);
     color: var(--text);
-    background: color-mix(in srgb, var(--surface-raised) 90%, var(--text) 2%);
+    background: var(--surface-raised);
   }
 
   .language-select:focus-within {
-    border-color: var(--accent-muted);
+    border-color: var(--border-strong);
     color: var(--accent);
-    box-shadow: 0 0 0 3px rgba(94, 232, 139, 0.08);
+    background: var(--surface-raised);
+    box-shadow: inset 0 -2px var(--accent);
   }
 
   .language-select select {
+    min-width: 8rem;
     width: 100%;
     height: 100%;
     padding: 0 2.5rem 0 0;
@@ -618,7 +674,7 @@
     color: var(--text);
     background: transparent;
     box-shadow: none;
-    font-size: 0.9rem;
+    font-size: 0.84rem;
     font-weight: 560;
     letter-spacing: -0.01em;
     outline: 0;
@@ -630,15 +686,155 @@
 
   .language-select option {
     color: var(--text);
-    background: var(--surface-raised);
+    background: #181818;
+  }
+
+  @supports (appearance: base-select) {
+    .language-select::after {
+      display: none;
+    }
+
+    .language-select .syntax-select,
+    .language-select .syntax-select::picker(select) {
+      appearance: base-select;
+    }
+
+    .language-select .syntax-select {
+      display: flex;
+      align-items: center;
+      gap: 0.55rem;
+      padding-right: 0.85rem;
+    }
+
+    .language-select .syntax-select > button {
+      display: flex;
+      flex: 1;
+      align-items: center;
+      align-self: stretch;
+      width: auto;
+      min-width: 0;
+      padding: 0;
+      border: 0;
+      color: inherit;
+      background: transparent;
+    }
+
+    .language-select .syntax-select selectedcontent,
+    .language-select .language-option {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+    }
+
+    .language-select .syntax-select selectedcontent .language-label {
+      color: var(--accent);
+    }
+
+    .language-select .syntax-select::picker-icon {
+      flex: none;
+      align-self: center;
+      color: var(--text-subtle);
+      transition:
+        color 140ms ease,
+        rotate 180ms ease;
+    }
+
+    .language-select .syntax-select:hover::picker-icon,
+    .language-select .syntax-select:focus::picker-icon {
+      color: var(--accent);
+    }
+
+    .language-select .syntax-select:open::picker-icon {
+      rotate: 180deg;
+    }
+
+    .language-select .syntax-select::picker(select) {
+      min-width: 13.5rem;
+      max-height: min(22rem, 60vh);
+      margin-block: 0.4rem;
+      padding: 0.35rem;
+      border: 1px solid var(--border-strong);
+      border-radius: 6px;
+      color: var(--text);
+      background: #181818;
+      box-shadow: 0 18px 48px rgba(0, 0, 0, 0.42);
+      opacity: 0;
+      transform: translateY(-0.25rem);
+      transition:
+        opacity 140ms ease,
+        transform 140ms ease,
+        display 140ms allow-discrete,
+        overlay 140ms allow-discrete;
+    }
+
+    .language-select .syntax-select:open::picker(select) {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .language-select .syntax-options-header {
+      margin: 0 0.4rem 0.25rem;
+      padding: 0.35rem 0.35rem 0.5rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      color: var(--text-subtle);
+      font-size: 0.62rem;
+      font-weight: 750;
+      letter-spacing: 0.12em;
+      line-height: 1;
+      pointer-events: none;
+    }
+
+    @starting-style {
+      .language-select .syntax-select:open::picker(select) {
+        opacity: 0;
+        transform: translateY(-0.25rem);
+      }
+    }
+
+    .language-select .language-option {
+      min-height: 2.6rem;
+      padding: 0.65rem 0.75rem;
+      border: 0;
+      border-radius: 3px;
+      color: var(--text-muted);
+      background: transparent;
+      font-size: 0.82rem;
+      font-weight: 560;
+      cursor: pointer;
+      transition:
+        color 100ms ease,
+        background 100ms ease;
+    }
+
+    .language-select .language-option:hover,
+    .language-select .language-option:focus {
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.055);
+    }
+
+    .language-select .language-option:checked {
+      color: #07140c;
+      background: var(--accent);
+    }
+
+    .language-select .language-option::checkmark {
+      order: 1;
+      margin-left: auto;
+      color: #07140c;
+      content: '✓';
+      font-size: 0.8rem;
+      font-weight: 800;
+    }
+
   }
 
   .tool-button {
     justify-content: center;
-    width: 2.15rem;
-    height: 2.15rem;
-    border: 1px solid transparent;
-    border-radius: 6px;
+    width: 3.25rem;
+    height: 100%;
+    border: 0;
+    border-right: 1px solid var(--border);
+    border-radius: 0;
     color: var(--text-muted);
     background: transparent;
   }
@@ -646,13 +842,15 @@
   .tool-button.text-button {
     gap: 0.4rem;
     width: auto;
-    padding: 0 0.62rem;
-    font-size: 0.7rem;
+    padding: 0 0.85rem;
+    font-size: 0.82rem;
     font-weight: 600;
   }
 
   .preview-button {
     margin-left: auto;
+    border-right: 0;
+    border-left: 1px solid var(--border);
   }
 
   .tool-button:hover,
@@ -666,6 +864,7 @@
     color: var(--accent);
     border-color: var(--accent-muted);
     background: rgba(94, 232, 139, 0.07);
+    box-shadow: inset 0 -2px var(--accent);
   }
 
   .editor-area {
@@ -677,14 +876,14 @@
   .byte-count {
     position: absolute;
     z-index: 5;
-    right: 0.8rem;
-    bottom: 0.45rem;
+    right: 0.7rem;
+    bottom: 0.5rem;
     padding: 0.18rem 0.35rem;
     border-radius: 3px;
     color: rgba(220, 226, 222, 0.45);
     background: rgba(30, 30, 30, 0.86);
     font-family: var(--font-mono);
-    font-size: 0.61rem;
+    font-size: 0.72rem;
     font-variant-numeric: tabular-nums;
     cursor: text;
     user-select: text;
@@ -719,13 +918,15 @@
     padding: 0.7rem;
     resize: none;
     font-family: var(--font-mono);
-    font-size: 0.72rem;
+    font-size: 0.9rem;
     line-height: 1.5;
   }
 
   .config-content {
     flex: 1;
-    padding: 1.15rem;
+    min-height: 0;
+    padding: 0 0 1.5rem;
+    overflow-y: auto;
   }
 
   .input-prefix-wrap,
@@ -745,16 +946,17 @@
     z-index: 1;
     color: var(--text-subtle);
     font-family: var(--font-mono);
-    font-size: 0.78rem;
+    font-size: 0.95rem;
     pointer-events: none;
   }
 
   .input-prefix-wrap input {
     min-width: 0;
     width: 100%;
+    min-height: 2.75rem;
     padding: 0.52rem 0.65rem 0.52rem 1.25rem;
     font-family: var(--font-mono);
-    font-size: 0.78rem;
+    font-size: 0.95rem;
   }
 
   .delay-wrap {
@@ -764,21 +966,23 @@
 
   .delay-wrap input {
     width: 7.5rem;
+    min-height: 2.75rem;
     padding: 0.5rem 0.6rem;
     text-align: right;
     font-family: var(--font-mono);
-    font-size: 0.78rem;
+    font-size: 0.95rem;
   }
 
   .delay-wrap span {
     font-family: var(--font-mono);
-    font-size: 0.7rem;
+    font-size: 0.85rem;
   }
 
   .delivery {
-    padding: 1rem 1.15rem 1.1rem;
+    margin-top: auto;
+    padding: 1.5rem 0 0;
     border-top: 1px solid var(--border);
-    background: rgba(0, 0, 0, 0.11);
+    background: transparent;
   }
 
   .delivery-heading {
@@ -790,17 +994,24 @@
 
   .delivery-heading h2 {
     margin: 0;
-    font-size: 0.88rem;
+    font-size: 1.25rem;
     font-weight: 650;
   }
 
   .url-box {
     display: grid;
-    grid-template-columns: 1fr 2.45rem;
-    margin: 0.8rem 0;
+    grid-template-columns: minmax(0, 1fr) 3rem auto;
+    margin: 1rem 0;
     border: 1px solid var(--border-strong);
-    border-radius: var(--radius-sm);
+    border-radius: 0;
     background: var(--surface-inset);
+    transition:
+      border-color 140ms ease,
+      box-shadow 140ms ease;
+  }
+
+  .url-box:hover {
+    border-color: rgba(231, 255, 239, 0.25);
   }
 
   .url-box:focus-within {
@@ -810,14 +1021,15 @@
 
   .url-box input {
     min-width: 0;
-    padding: 0.64rem 0.72rem;
+    min-height: 3rem;
+    padding: 0.75rem 0.9rem;
     border: 0;
     border-radius: 0;
     color: #b8c4bc;
     background: transparent;
     box-shadow: none;
     font-family: var(--font-mono);
-    font-size: 0.69rem;
+    font-size: 0.85rem;
   }
 
   .url-box button {
@@ -834,17 +1046,46 @@
     background: rgba(94, 232, 139, 0.05);
   }
 
+  .url-box .open-response-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    min-height: 3rem;
+    padding: 0 1rem;
+    border: 0;
+    border-left: 1px solid rgba(0, 0, 0, 0.25);
+    color: #06120a;
+    background: var(--accent);
+    font-size: 0.9rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .url-box .open-response-button:hover {
+    color: #06120a;
+    background: var(--accent-hover);
+  }
+
+  .url-warning {
+    margin: 0.5rem 0 0;
+    color: var(--warning);
+    font-size: 0.75rem;
+    line-height: 1.4;
+  }
+
   .primary-button {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 0.45rem;
-    padding: 0.58rem 0.85rem;
+    min-height: 2.75rem;
+    padding: 0.65rem 1rem;
     border: 1px solid var(--accent);
-    border-radius: 6px;
+    border-radius: var(--radius-sm);
     color: #06120a;
     background: var(--accent);
-    font-size: 0.72rem;
+    font-size: 0.9rem;
     font-weight: 700;
   }
 
@@ -862,6 +1103,61 @@
     border-color: var(--border-strong);
     color: var(--text-muted);
     background: var(--surface-raised);
+  }
+
+  .editor-actions .csrf-generate-button {
+    flex: none;
+    height: 100%;
+    min-height: 0;
+    padding: 0 0.85rem;
+    border: 0;
+    border-right: 1px solid var(--border);
+    border-radius: 0;
+    font-size: 0.82rem;
+  }
+
+  .editor-actions .csrf-generate-button.quiet {
+    border-color: var(--border);
+    background: transparent;
+  }
+
+  .editor-actions .csrf-generate-button.quiet:hover {
+    border-color: var(--border-strong);
+    color: var(--text);
+    background: var(--surface-raised);
+  }
+
+  .delivery-options {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 1rem;
+    margin: 1rem 0;
+  }
+
+  .compact-field {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 0.65rem;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    font-weight: 600;
+  }
+
+  .compact-field input {
+    font-weight: 400;
+  }
+
+  .path-field {
+    min-width: 0;
+  }
+
+  .delivery-options .input-prefix-wrap input {
+    width: 100%;
+  }
+
+  .delivery-options .delay-wrap input {
+    width: 6.5rem;
   }
 
   .toast-region {
@@ -922,6 +1218,7 @@
     display: grid;
     padding: 0.2rem;
     border: 0;
+    border-radius: var(--radius-sm);
     place-items: center;
     color: var(--text-subtle);
     background: transparent;
@@ -929,6 +1226,7 @@
 
   .toast button:hover {
     color: var(--text);
+    background: var(--interactive-hover);
   }
 
   .sr-only {
@@ -948,355 +1246,6 @@
       opacity: 0;
       transform: translateY(6px);
     }
-  }
-
-  @media (max-width: 980px) {
-    .workspace {
-      grid-template-columns: 1fr;
-    }
-
-    .editor-card {
-      height: min(46rem, calc(100vh - 5.5rem));
-      min-height: 34rem;
-    }
-
-    .config-card {
-      min-height: 36rem;
-    }
-  }
-
-  @media (max-width: 620px) {
-    .app-shell {
-      padding: 0 0.65rem 0.65rem;
-    }
-
-    .site-header {
-      grid-template-columns: 1fr auto;
-      height: 3.8rem;
-    }
-
-    .workspace {
-      min-height: calc(100vh - 4.45rem);
-    }
-
-    .editor-card {
-      height: calc(100dvh - 4.45rem);
-      min-height: 30rem;
-    }
-
-    .editor-bar {
-      align-items: flex-start;
-      padding: 0.55rem;
-    }
-
-    .editor-actions {
-      width: 100%;
-    }
-
-    .language-select {
-      margin-right: auto;
-    }
-
-    .tool-button.text-button span {
-      display: none;
-    }
-
-    .tool-button.text-button {
-      width: 2.15rem;
-      padding: 0;
-    }
-
-    .config-content,
-    .delivery {
-      padding-right: 0.8rem;
-      padding-left: 0.8rem;
-    }
-  }
-
-  /* Flat, spacious application layout */
-  .app-shell {
-    width: 100%;
-    max-width: none;
-    padding: 0 2rem 2rem;
-  }
-
-  .site-header {
-    display: flex;
-    height: 5.5rem;
-  }
-
-  .brand {
-    gap: 0.75rem;
-  }
-
-  .brand-mark {
-    width: auto;
-    height: auto;
-    border: 0;
-    border-radius: 0;
-    background: transparent;
-  }
-
-  .brand-mark img {
-    width: 2rem;
-    height: 2rem;
-  }
-
-  .brand-name {
-    color: var(--accent);
-    font-size: 2rem;
-    font-weight: 720;
-  }
-
-  .workspace {
-    grid-template-columns: minmax(0, 1fr) minmax(28rem, 1fr);
-    gap: 2rem;
-    min-height: calc(100vh - 7.5rem);
-  }
-
-  .editor-card,
-  .config-card {
-    border: 0;
-    border-radius: 0;
-    background: transparent;
-    box-shadow: none;
-  }
-
-  .editor-card {
-    grid-template-rows: minmax(0, 1fr) auto;
-    height: calc(100vh - 7.5rem);
-    min-height: 40rem;
-    border: 1px solid var(--border-strong);
-  }
-
-  .editor-card.panel-open {
-    grid-template-rows: minmax(14rem, 1fr) minmax(12rem, 0.62fr) auto;
-  }
-
-  .config-card {
-    height: calc(100vh - 7.5rem);
-    min-height: 40rem;
-    padding-left: 2rem;
-    border-left: 1px solid var(--border);
-    overflow-y: auto;
-  }
-
-  .card-bar {
-    min-height: 4rem;
-    background: transparent;
-  }
-
-  .editor-bar {
-    height: 3.25rem;
-    min-height: 3.25rem;
-    justify-content: flex-start;
-    align-items: stretch;
-    gap: 0;
-    padding: 0;
-    border-top: 1px solid var(--border);
-    border-bottom: 0;
-  }
-
-  .editor-actions {
-    align-items: stretch;
-    width: 100%;
-    height: 100%;
-    gap: 0;
-  }
-
-  .language-select {
-    min-width: 10.5rem;
-    height: 100%;
-    padding-left: 1rem;
-    border: 0;
-    border-right: 1px solid var(--border);
-    border-radius: 0;
-    background: transparent;
-    box-shadow: none;
-  }
-
-  .language-select:hover {
-    border-color: var(--border-strong);
-    background: var(--surface-raised);
-  }
-
-  .language-select:focus-within {
-    border-color: var(--border-strong);
-    background: var(--surface-raised);
-    box-shadow: inset 0 -2px var(--accent);
-  }
-
-  .language-select select {
-    min-width: 8rem;
-    font-size: 0.84rem;
-  }
-
-  .tool-button {
-    width: 3.25rem;
-    height: 100%;
-    border: 0;
-    border-right: 1px solid var(--border);
-    border-radius: 0;
-    background: transparent;
-  }
-
-  .tool-button.text-button {
-    gap: 0.4rem;
-    width: auto;
-    padding: 0 0.85rem;
-    font-size: 0.82rem;
-  }
-
-  .tool-button:hover {
-    border-color: var(--border-strong);
-    background: var(--surface-raised);
-  }
-
-  .tool-button.active {
-    border-color: var(--border-strong);
-    background: rgba(94, 232, 139, 0.07);
-    box-shadow: inset 0 -2px var(--accent);
-  }
-
-  .preview-button {
-    border-right: 0;
-    border-left: 1px solid var(--border);
-  }
-
-  .byte-count {
-    right: 0.7rem;
-    bottom: 0.5rem;
-    font-size: 0.72rem;
-  }
-
-  .csrf-panel textarea {
-    font-size: 0.9rem;
-  }
-
-  .editor-actions .csrf-generate-button {
-    flex: none;
-    height: 100%;
-    min-height: 0;
-    padding: 0 0.85rem;
-    border: 0;
-    border-right: 1px solid var(--border);
-    border-radius: 0;
-    font-size: 0.82rem;
-  }
-
-  .editor-actions .csrf-generate-button.quiet {
-    border-color: var(--border);
-    background: transparent;
-  }
-
-  .editor-actions .csrf-generate-button.quiet:hover {
-    border-color: var(--border-strong);
-    color: var(--text);
-    background: var(--surface-raised);
-  }
-
-  .config-content {
-    flex: 1;
-    min-height: 0;
-    padding: 0 0 1.5rem;
-    overflow-y: auto;
-  }
-
-  .input-prefix-wrap input,
-  .delay-wrap input {
-    min-height: 2.75rem;
-    font-size: 0.95rem;
-  }
-
-  .input-prefix {
-    font-size: 0.95rem;
-  }
-
-  .delay-wrap span {
-    font-size: 0.85rem;
-  }
-
-  .delivery {
-    margin-top: auto;
-    padding: 1.5rem 0 0;
-    background: transparent;
-  }
-
-  .delivery-heading h2 {
-    font-size: 1.25rem;
-  }
-
-  .delivery-options {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 1rem;
-    margin: 1rem 0;
-  }
-
-  .compact-field {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    align-items: center;
-    gap: 0.65rem;
-    color: var(--text-muted);
-    font-size: 0.85rem;
-    font-weight: 600;
-  }
-
-  .compact-field input {
-    font-weight: 400;
-  }
-
-  .path-field {
-    min-width: 0;
-  }
-
-  .delivery-options .input-prefix-wrap input {
-    width: 100%;
-  }
-
-  .delivery-options .delay-wrap input {
-    width: 6.5rem;
-  }
-
-  .url-box {
-    grid-template-columns: minmax(0, 1fr) 3rem auto;
-    margin: 1rem 0;
-    border-radius: 0;
-  }
-
-  .url-box input {
-    min-height: 3rem;
-    padding: 0.75rem 0.9rem;
-    font-size: 0.85rem;
-  }
-
-  .url-box .open-response-button {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.45rem;
-    min-height: 3rem;
-    padding: 0 1rem;
-    border: 0;
-    border-left: 1px solid rgba(0, 0, 0, 0.25);
-    color: #06120a;
-    background: var(--accent);
-    font-size: 0.9rem;
-    font-weight: 700;
-    white-space: nowrap;
-  }
-
-  .url-box .open-response-button:hover {
-    color: #06120a;
-    background: var(--accent-hover);
-  }
-
-  .primary-button {
-    min-height: 2.75rem;
-    padding: 0.65rem 1rem;
-    border-radius: var(--radius-sm);
-    font-size: 0.9rem;
   }
 
   @media (max-width: 980px) {
@@ -1343,13 +1292,13 @@
       padding: 0;
     }
 
-    .language-select select {
-      min-width: 6rem;
-    }
-
     .language-select {
       min-width: 9rem;
       margin-right: 0;
+    }
+
+    .language-select select {
+      min-width: 6rem;
     }
 
     .tool-button.text-button {

@@ -14,7 +14,7 @@ FROM node:alpine AS frontend-builder
 WORKDIR /app
 
 COPY frontend/package*.json ./
-RUN npm install
+RUN npm ci
 
 COPY frontend/ ./
 COPY --from=mime-map-builder /tmp/mimeTypes.js ./src/generated/mimeTypes.js
@@ -34,5 +34,7 @@ RUN apt-get update && \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=rust-builder /usr/local/cargo/bin/responder /responder
+
+USER 65534:65534
 
 CMD ["/responder"]

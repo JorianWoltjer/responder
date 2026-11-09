@@ -24,3 +24,10 @@ test('does not use HTML Emmet outside XHTML', () => {
   const source = '<svg xmlns="http://www.w3.org/2000/svg">.test'
   assert.equal(expand('.test', source), undefined)
 })
+
+test('does not use HTML Emmet in XML comments or CDATA', () => {
+  const comment = `<svg xmlns="http://www.w3.org/2000/svg"><!-- <html xmlns="${XHTML}">.test`
+  const cdata = `<html xmlns="${XHTML}"><![CDATA[.test`
+  assert.equal(expand('.test', comment), undefined)
+  assert.equal(expand('.test', cdata), undefined)
+})

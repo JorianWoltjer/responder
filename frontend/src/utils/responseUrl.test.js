@@ -34,6 +34,18 @@ test('collapses complete wildcard CORS headers', () => {
   assert.equal(path, '/?body=ok&cors=true')
 })
 
+test('preserves duplicate response headers', () => {
+  const path = buildResponsePath({
+    body: 'ok',
+    headers: [
+      ['Set-Cookie', 'a=1'],
+      ['Set-Cookie', 'b=2']
+    ]
+  })
+
+  assert.equal(path, '/?body=ok&h[c]=a%3D1&h[c]=b%3D2')
+})
+
 test('percent-encodes every non-alphanumeric query byte', () => {
   assert.equal(
     encodeQueryComponent("AZaz09 -_.!~*'() /🌍"),

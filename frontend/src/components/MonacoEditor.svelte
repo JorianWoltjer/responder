@@ -1,12 +1,25 @@
 <script>
   import { createEventDispatcher, onMount } from 'svelte'
+  import * as monaco from 'monaco-editor'
+  import editorWorker from 'monaco-editor/editor/editor.worker?worker&inline'
+  import cssWorker from 'monaco-editor/language/css/css.worker?worker&inline'
+  import htmlWorker from 'monaco-editor/language/html/html.worker?worker&inline'
+  import jsonWorker from 'monaco-editor/language/json/json.worker?worker&inline'
+  import typescriptWorker from 'monaco-editor/language/typescript/ts.worker?worker&inline'
 
   export let value = ''
   export let language = 'html'
 
   const dispatch = createEventDispatcher()
-  const MONACO_VERSION = '0.57.0'
-  const MONACO_BASE = `https://cdn.jsdelivr.net/npm/monaco-editor@${MONACO_VERSION}/min/vs`
+  self.MonacoEnvironment = {
+    getWorker(_moduleId, label) {
+      if (label === 'json') return new jsonWorker()
+      if (label === 'css' || label === 'scss' || label === 'less') return new cssWorker()
+      if (label === 'html' || label === 'handlebars' || label === 'razor') return new htmlWorker()
+      if (label === 'typescript' || label === 'javascript') return new typescriptWorker()
+      return new editorWorker()
+    }
+  }
 
   let container
   let editor
@@ -14,77 +27,49 @@
   let loadError = ''
   let changingInternally = false
 
-  function loadMonaco() {
-    if (window.monaco) return Promise.resolve(window.monaco)
-    if (window.__responderMonacoPromise) return window.__responderMonacoPromise
-
-    window.__responderMonacoPromise = new Promise((resolve, reject) => {
-      const finish = () => {
-        window.require.config({ paths: { vs: MONACO_BASE } })
-        window.require(['vs/editor/editor.main'], () => resolve(window.monaco), reject)
-      }
-
-      if (window.require?.config) {
-        finish()
-        return
-      }
-
-      const script = document.createElement('script')
-      script.src = `${MONACO_BASE}/loader.js`
-      script.onload = finish
-      script.onerror = () => reject(new Error('Could not load the Monaco editor'))
-      document.head.appendChild(script)
-    })
-
-    return window.__responderMonacoPromise
-  }
-
   onMount(() => {
     let disposed = false
     let contentListener
 
-    loadMonaco()
-      .then((monaco) => {
-        if (disposed) return
-        editor = monaco.editor.create(container, {
-          value,
-          language,
-          theme: 'vs-dark',
-          automaticLayout: true,
-          autoIndent: 'full',
-          formatOnPaste: false,
-          tabSize: 2,
-          insertSpaces: true,
-          detectIndentation: false,
-          wordWrap: 'on',
-          minimap: { enabled: false },
-          padding: { top: 14, bottom: 14 },
-          fontSize: 14,
-          lineHeight: 22,
-          fontFamily: "'Fira Code', 'SFMono-Regular', Consolas, 'Liberation Mono', monospace",
-          smoothScrolling: true,
-          scrollBeyondLastLine: false,
-          renderLineHighlight: 'gutter',
-          overviewRulerBorder: false,
-          bracketPairColorization: { enabled: true }
-        })
+    try {
+      editor = monaco.editor.create(container, {
+        value,
+        language,
+        theme: 'vs-dark',
+        automaticLayout: true,
+        autoIndent: 'full',
+        formatOnPaste: false,
+        tabSize: 2,
+        insertSpaces: true,
+        detectIndentation: false,
+        wordWrap: 'on',
+        minimap: { enabled: false },
+        padding: { top: 14, bottom: 14 },
+        fontSize: 14,
+        lineHeight: 22,
+        fontFamily: "'Fira Code', 'SFMono-Regular', Consolas, 'Liberation Mono', monospace",
+        smoothScrolling: true,
+        scrollBeyondLastLine: false,
+        renderLineHighlight: 'gutter',
+        overviewRulerBorder: false,
+        bracketPairColorization: { enabled: true }
+      })
 
-        contentListener = editor.onDidChangeModelContent(() => {
-          changingInternally = true
-          value = editor.getValue()
-          dispatch('change', value)
-          changingInternally = false
-        })
-        document.fonts?.load('14px "Fira Code"').then(() => {
-          if (!disposed) monaco.editor.remeasureFonts()
-        })
-        loading = false
-        dispatch('mount', { editor, monaco })
+      contentListener = editor.onDidChangeModelContent(() => {
+        changingInternally = true
+        value = editor.getValue()
+        dispatch('change', value)
+        changingInternally = false
       })
-      .catch((error) => {
-        loading = false
-        loadError = error.message
+      document.fonts?.load('14px "Fira Code"').then(() => {
+        if (!disposed) monaco.editor.remeasureFonts()
       })
+      loading = false
+      dispatch('mount', { editor, monaco })
+    } catch (error) {
+      loading = false
+      loadError = error.message
+    }
 
     return () => {
       disposed = true
@@ -99,7 +84,7 @@
   }
 
   $: if (editor && editor.getModel()?.getLanguageId() !== language) {
-    window.monaco.editor.setModelLanguage(editor.getModel(), language)
+    monaco.editor.setModelLanguage(editor.getModel(), language)
   }
 </script>
 

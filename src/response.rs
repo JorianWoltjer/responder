@@ -1,11 +1,10 @@
-use std::{borrow::Cow, collections::HashMap, str::FromStr, time::Instant};
+use std::{borrow::Cow, collections::HashMap, str::FromStr, sync::LazyLock, time::Instant};
 
 use axum::{
-    http::{HeaderName, HeaderValue, StatusCode},
+    http::{header::InvalidHeaderValue, HeaderMap, HeaderName, HeaderValue, StatusCode},
     response::IntoResponse,
 };
 use b64::FromBase64;
-use lazy_static::lazy_static;
 use serde::{Deserialize, Deserializer, Serialize};
 use tokio::time::{sleep, Duration};
 
@@ -30,7 +29,7 @@ pub struct Response {
     body_b64: Option<String>,
     gist: Option<String>,
     #[serde(alias = "h", default)]
-    pub headers: HashMap<String, String>,
+    pub headers: HashMap<String, Vec<String>>,
     #[serde(default, deserialize_with = "deserialize_bool")]
     pub cors: bool,
     #[serde(default, deserialize_with = "deserialize_delay")]
@@ -101,20 +100,33 @@ fn content_type_from_path(path: &str) -> Option<Cow<'static, str>> {
         .map(with_utf8_charset)
 }
 
-lazy_static! {
-    // Mirrored in frontend/src/utils/index.js -> const HEADER_ALIAS
-    static ref HEADER_ALIAS: HashMap<&'static str, &'static str> = {
-        let mut map = HashMap::new();
-        map.insert("ct", "content-type");
-        map.insert("c", "set-cookie");
-        map.insert("sc", "set-cookie");
-        map.insert("cookie", "set-cookie");
-        map.insert("l", "location");
-        map.insert("loc", "location");
-        map.insert("csp", "content-security-policy");
-        map
-    };
+fn set_default_content_type(
+    headers: &mut HeaderMap,
+    inferred_content_type: Option<&str>,
+    body_content_type: Option<&str>,
+) -> Result<(), InvalidHeaderValue> {
+    if !headers.contains_key("content-type") {
+        let content_type = inferred_content_type
+            .or(body_content_type)
+            .unwrap_or("text/plain");
+        headers.insert("content-type", HeaderValue::from_str(content_type)?);
+    }
+
+    Ok(())
 }
+
+// Mirrored in frontend/src/utils/index.js -> const HEADER_ALIAS
+static HEADER_ALIAS: LazyLock<HashMap<&'static str, &'static str>> = LazyLock::new(|| {
+    let mut map = HashMap::new();
+    map.insert("ct", "content-type");
+    map.insert("c", "set-cookie");
+    map.insert("sc", "set-cookie");
+    map.insert("cookie", "set-cookie");
+    map.insert("l", "location");
+    map.insert("loc", "location");
+    map.insert("csp", "content-security-policy");
+    map
+});
 
 impl Response {
     pub async fn get_body(&self) -> Result<(Vec<u8>, Option<String>), Err> {
@@ -131,27 +143,28 @@ impl Response {
 
     async fn try_into_response(self) -> Result<axum::response::Response, Err> {
         let started_at = Instant::now();
-        let mut response = axum::response::Response::builder().status(self.status);
+        let status = StatusCode::from_u16(self.status)?;
 
         let (body, content_type) = self.get_body().await?;
+        let mut response = axum::response::Response::new(axum::body::Body::from(body));
+        *response.status_mut() = status;
 
         // Add requested headers and resolve aliases
-        let headers = response.headers_mut().expect("builder won't have errors");
-        for (key, value) in &self.headers {
+        let headers = response.headers_mut();
+        for (key, values) in &self.headers {
             let key = HEADER_ALIAS.get(key.as_str()).copied().unwrap_or(key);
-            headers.append(HeaderName::from_str(key)?, HeaderValue::from_str(value)?);
+            let key = HeaderName::from_str(key)?;
+            for value in values {
+                headers.append(key.clone(), HeaderValue::from_str(value)?);
+            }
         }
         let inferred_content_type = self.path.as_deref().and_then(content_type_from_path);
         // Set Content-Type from path extension if not set
-        headers.entry("content-type").or_insert(
-            HeaderValue::from_str(
-                inferred_content_type
-                    .as_deref()
-                    // Take from body, or default to text/plain
-                    .unwrap_or(content_type.as_deref().unwrap_or("text/plain")),
-            )
-            .expect("mime_guess is valid"),
-        );
+        set_default_content_type(
+            headers,
+            inferred_content_type.as_deref(),
+            content_type.as_deref(),
+        )?;
         // Allow all Cross-Origin Resource Sharing
         if self.cors {
             let any = HeaderValue::from_static("*");
@@ -166,7 +179,7 @@ impl Response {
             sleep(requested_delay - elapsed).await;
         }
 
-        Ok(response.body(body.into())?)
+        Ok(response)
     }
 }
 
@@ -210,6 +223,35 @@ mod tests {
         );
     }
 
+    #[test]
+    fn invalid_default_content_type_returns_error() {
+        let mut headers = HeaderMap::new();
+
+        let result = set_default_content_type(&mut headers, None, Some("invalid\nvalue"));
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn explicit_content_type_skips_invalid_default() {
+        let mut headers = HeaderMap::new();
+        headers.insert("content-type", HeaderValue::from_static("text/html"));
+
+        let result = set_default_content_type(&mut headers, None, Some("invalid\nvalue"));
+
+        assert!(result.is_ok());
+        assert_eq!(headers.get("content-type").unwrap(), "text/html");
+    }
+
+    #[tokio::test]
+    async fn invalid_status_is_handled_without_panicking() {
+        let response: Response = serde_qs::from_str("status=0").unwrap();
+
+        let response = response.into_response().await;
+
+        assert_eq!(response.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
     #[tokio::test]
     async fn explicit_content_type_overrides_inferred_charset() {
         let mut response: Response = serde_qs::from_str("h[ct]=text/html").unwrap();
@@ -250,6 +292,21 @@ mod tests {
         let headers = axum_response.headers();
         assert_eq!(headers.get("content-type").unwrap(), "text/plain");
         assert_eq!(headers.get("content-length").unwrap(), "42");
+    }
+
+    #[tokio::test]
+    async fn deserialize_duplicate_headers() {
+        let response: Response =
+            serde_qs::from_str("h[set-cookie]=a%3D1&h[set-cookie]=b%3D2").unwrap();
+        let response = response.into_response().await;
+
+        let cookies: Vec<_> = response
+            .headers()
+            .get_all("set-cookie")
+            .iter()
+            .map(|value| value.to_str().unwrap())
+            .collect();
+        assert_eq!(cookies, ["a=1", "b=2"]);
     }
 
     #[tokio::test]

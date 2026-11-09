@@ -12,6 +12,7 @@
   --accent: #5ee88b;
   --accent-hover: #76f29c;
   --accent-muted: rgba(94, 232, 139, 0.38);
+  --interactive-hover: rgba(231, 255, 239, 0.045);
   --danger: #ff7777;
   --warning: #f6c86c;
   --radius: 3px;
@@ -64,6 +65,13 @@ button {
     opacity 120ms ease;
 }
 
+a {
+  transition:
+    color 140ms ease,
+    background 140ms ease,
+    opacity 140ms ease;
+}
+
 button:active:not(:disabled) {
   transform: translateY(1px);
 }
@@ -85,6 +93,12 @@ textarea {
     border-color 120ms ease,
     box-shadow 120ms ease,
     background 120ms ease;
+}
+
+input:hover:not(:disabled):not(:focus),
+select:hover:not(:disabled):not(:focus),
+textarea:hover:not(:disabled):not(:focus) {
+  border-color: rgba(231, 255, 239, 0.25);
 }
 
 input:focus,

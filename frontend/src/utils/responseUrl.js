@@ -19,7 +19,7 @@ export function buildResponsePath({
   filename = '',
   status = 200,
   delay = 0,
-  headers = new Map(),
+  headers = [],
   origin = 'https://example.com'
 }) {
   const url = new URL(origin)
@@ -32,10 +32,10 @@ export function buildResponsePath({
   if (status !== 200) addParameter('status', status)
   if (delay > 0) addParameter('delay', delay)
 
-  const compactHeaders = new Map(headers)
+  let compactHeaders = Array.from(headers)
   if (hasCORS(headers)) {
     addParameter('cors', 'true')
-    Object.keys(CORS_HEADERS).forEach((name) => compactHeaders.delete(name))
+    compactHeaders = compactHeaders.filter(([name]) => !Object.hasOwn(CORS_HEADERS, name))
   }
 
   for (let [name, value] of compactHeaders) {

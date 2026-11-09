@@ -1,6 +1,11 @@
 import { extract } from 'emmet'
 import { expandAbbreviation } from 'emmet-monaco-es'
-import { XHTML_NAMESPACE, xmlNamespaceAt } from './svgComplete.js'
+import {
+  SVG_NAMESPACE,
+  XHTML_NAMESPACE,
+  markupContextAt,
+  markupModelContextAt
+} from './markupContext.js'
 
 // Emmet's SVG profile: https://docs.emmet.io/cheat-sheet/
 const SVG_SNIPPETS = {
@@ -144,7 +149,9 @@ function htmlEmmetExpansion(abbreviation) {
 }
 
 export function xhtmlEmmetExpansion(text, offset, abbreviation, { language = 'xml' } = {}) {
-  if (language !== 'xml' || xmlNamespaceAt(text, offset) !== XHTML_NAMESPACE) return
+  const context = markupContextAt(text, offset, { language })
+  if (language !== 'xml' || context.position !== 'text' || context.namespace !== XHTML_NAMESPACE)
+    return
   return htmlEmmetExpansion(abbreviation)
 }
 
@@ -178,51 +185,18 @@ export function svgEmmetExpansions(abbreviation, { syntax = 'html', insideSvg = 
   })
 }
 
-function insideSvg(model, position) {
-  const before = model.getValueInRange({
-    startLineNumber: 1,
-    startColumn: 1,
-    endLineNumber: position.lineNumber,
-    endColumn: position.column
-  })
-  const opens = before.match(/<svg\b/gi)?.length ?? 0
-  const closes = before.match(/<\/svg\b/gi)?.length ?? 0
-  return opens > closes
-}
-
-function isMarkupText(monaco, model, position) {
-  const line = model.getLineContent(position.lineNumber)
-  const tokens = monaco.editor.tokenize(line, model.getLanguageId())[0] ?? []
-  let index = -1
-  for (let i = tokens.length - 1; i >= 0; i--) {
-    if (position.column - 1 > tokens[i].offset) {
-      index = i
-      break
-    }
-  }
-  if (index < 0) return false
-  if (tokens[index].type !== '') return false
-  if (index === 0) return true
-  const previous = tokens[index - 1].type
-  return previous === 'delimiter.html' || previous === 'delimiter.xml'
-}
-
 function provideSvgCompletions(monaco, model, position, language) {
-  if (!isMarkupText(monaco, model, position)) return
+  const markup = markupModelContextAt(model, position, { language })
+  if (markup.position !== 'text') return
 
   const line = model.getLineContent(position.lineNumber)
   const extracted = extract(line, position.column - 1)
   if (!extracted?.abbreviation) return
 
-  const before = model.getValueInRange({
-    startLineNumber: 1,
-    startColumn: 1,
-    endLineNumber: position.lineNumber,
-    endColumn: position.column
-  })
-  const xhtmlExpansion = xhtmlEmmetExpansion(before, before.length, extracted.abbreviation, {
-    language
-  })
+  const xhtmlExpansion =
+    language === 'xml' && markup.namespace === XHTML_NAMESPACE
+      ? htmlEmmetExpansion(extracted.abbreviation)
+      : undefined
   if (xhtmlExpansion) {
     return {
       suggestions: [
@@ -246,7 +220,7 @@ function provideSvgCompletions(monaco, model, position, language) {
   const syntax = language === 'xml' ? 'xml' : 'html'
   const expansions = svgEmmetExpansions(extracted.abbreviation, {
     syntax,
-    insideSvg: insideSvg(model, position)
+    insideSvg: markup.namespace === SVG_NAMESPACE
   })
   if (!expansions.length) return
 

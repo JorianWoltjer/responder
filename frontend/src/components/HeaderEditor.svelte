@@ -1,4 +1,5 @@
 <script>
+  import { tick } from 'svelte'
   import {
     CORS_HEADERS,
     HTTP_HEADERS,
@@ -14,21 +15,22 @@
   export let status
 
   $: corsEnabled = hasCORS(headers)
-  let rows = [...Array.from(headers), ['', '']]
+  let rows = [...Array.from(headers, (row) => [...row]), ['', '']]
   let lastHeaders = headers
+  let tableBody
 
   $: syncExternalHeaders(headers)
 
   function syncExternalHeaders(nextHeaders) {
     if (nextHeaders === lastHeaders) return
     const draft = rows.at(-1) ?? ['', '']
-    rows = [...Array.from(nextHeaders), draft[0].trim() ? ['', ''] : draft]
+    rows = [...Array.from(nextHeaders, (row) => [...row]), draft[0].trim() ? ['', ''] : draft]
     lastHeaders = nextHeaders
   }
 
   function publish(nextRows) {
     rows = nextRows
-    const nextHeaders = new Map(nextRows.filter(([name]) => name.trim()))
+    const nextHeaders = nextRows.filter(([name]) => name.trim()).map((row) => [...row])
     lastHeaders = nextHeaders
     headers = nextHeaders
   }
@@ -49,26 +51,41 @@
     publish(rows.filter((_, rowIndex) => rowIndex !== index))
   }
 
-  function openDatalist(event) {
-    const input = event.currentTarget
-    if (!input.list || typeof input.showPicker !== 'function') return
+  function firstDisplayedDatalistValue(input) {
+    const query = input.value.toLowerCase()
+    const options = Array.from(input.list?.options ?? [])
+    const option = options.find(
+      ({ disabled, label, value }) =>
+        !disabled && (value.toLowerCase().includes(query) || label.toLowerCase().includes(query))
+    )
+    return option?.value
+  }
 
-    try {
-      input.showPicker()
-    } catch {
-      // Some browsers require a user activation or do not support datalist pickers.
-    }
+  async function acceptDatalistAndAdvance(event, index, field) {
+    if (event.key !== 'Enter' || event.isComposing) return
+
+    const value = firstDisplayedDatalistValue(event.currentTarget)
+    if (value === undefined) return
+
+    event.preventDefault()
+    if (event.repeat) return
+
+    updateRow(index, field, value)
+    await tick()
+
+    const inputs = tableBody?.querySelectorAll('.header-row input') ?? []
+    inputs[index * 2 + field + 1]?.focus()
   }
 
   function toggleCors() {
-    const next = new Map(headers)
+    let next = Array.from(headers, (row) => [...row])
     if (corsEnabled) {
-      Object.keys(CORS_HEADERS).forEach((name) => next.delete(name))
+      next = next.filter(([name]) => !Object.hasOwn(CORS_HEADERS, name))
     } else {
-      Object.entries(CORS_HEADERS).forEach(([name, value]) => next.set(name, value))
+      next.push(...Object.entries(CORS_HEADERS))
     }
     const draft = rows.at(-1) ?? ['', '']
-    publish([...Array.from(next), draft])
+    publish([...next, draft])
   }
 </script>
 
@@ -95,7 +112,7 @@
     <div class="table-head" aria-hidden="true">
       <span>Name</span><span>Value</span><span></span>
     </div>
-    <div class="table-body">
+    <div class="table-body" bind:this={tableBody}>
       {#each rows as row, index (index)}
         {@const valueExample = getHttpHeaderExample(row[0])}
         {@const valueSuggestions = getHttpHeaderValues(row[0])}
@@ -110,7 +127,7 @@
             placeholder={isInputRow ? 'Add header…' : 'Header name'}
             value={row[0]}
             on:input={(event) => updateRow(index, 0, event.currentTarget.value)}
-            on:focus={openDatalist}
+            on:keydown={(event) => acceptDatalistAndAdvance(event, index, 0)}
             on:blur={cleanRows}
           />
           <input
@@ -122,7 +139,7 @@
             placeholder={valueExample || 'Value'}
             value={row[1]}
             on:input={(event) => updateRow(index, 1, event.currentTarget.value)}
-            on:focus={openDatalist}
+            on:keydown={(event) => acceptDatalistAndAdvance(event, index, 1)}
             on:blur={cleanRows}
           />
           {#if valueSuggestions.length}
@@ -228,6 +245,16 @@
     background: var(--accent);
   }
 
+  .cors-button:hover:not(.active) {
+    border-color: var(--accent-muted);
+    color: var(--text);
+  }
+
+  .cors-button.active:hover {
+    border-color: var(--accent-hover);
+    background: var(--accent-hover);
+  }
+
   .header-table {
     overflow: hidden;
     border: 1px solid var(--border);
@@ -286,6 +313,12 @@
   .header-row input:focus {
     background: rgba(94, 232, 139, 0.045);
     box-shadow: inset 0 0 0 1px var(--accent-muted);
+  }
+
+  .header-row input:hover:not(:focus) {
+    border-right-color: var(--border);
+    border-bottom-color: var(--border);
+    background: var(--interactive-hover);
   }
 
   .row-actions {
