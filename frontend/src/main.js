@@ -34,7 +34,6 @@ import Column from "primevue/column"
 import InputNumber from 'primevue/inputnumber'
 import InputText from 'primevue/inputtext'
 import Textarea from 'primevue/textarea'
-import InputSwitch from 'primevue/inputswitch'
 import AutoComplete from 'primevue/autocomplete'
 import Toast from 'primevue/toast'
 import ToastService from 'primevue/toastservice'
@@ -50,7 +49,6 @@ createApp(App)
   .component('InputNumber', InputNumber)
   .component('InputText', InputText)
   .component('Textarea', Textarea)
-  .component('InputSwitch', InputSwitch)
   .component('AutoComplete', AutoComplete)
   .component('Toast', Toast)
   .directive('tooltip', Tooltip)
@@ -66,7 +64,7 @@ createApp(App)
   .use(ToastService)
   .use(VueMonacoEditorPlugin, {
     paths: {
-      vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs'
+      vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.57.0/min/vs'
     },
   })
   .mount('#app')

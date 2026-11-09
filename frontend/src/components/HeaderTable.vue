@@ -91,6 +91,7 @@ const search = (event) => {
     </div>
     <DataTable
       :value="Array.from(headers)"
+      dataKey="0"
       editMode="cell"
       showGridlines
       resizableColumns
