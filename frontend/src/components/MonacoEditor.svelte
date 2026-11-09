@@ -1,32 +1,33 @@
-<script>
-  import { createEventDispatcher, onMount } from 'svelte'
-  import * as monaco from 'monaco-editor'
+<script module>
   import editorWorker from 'monaco-editor/editor/editor.worker?worker&inline'
   import cssWorker from 'monaco-editor/language/css/css.worker?worker&inline'
   import htmlWorker from 'monaco-editor/language/html/html.worker?worker&inline'
   import jsonWorker from 'monaco-editor/language/json/json.worker?worker&inline'
   import typescriptWorker from 'monaco-editor/language/typescript/ts.worker?worker&inline'
 
-  export let value = ''
-  export let language = 'html'
-  export let readOnly = false
-
-  const dispatch = createEventDispatcher()
-  self.MonacoEnvironment = {
-    getWorker(_moduleId, label) {
-      if (label === 'json') return new jsonWorker()
-      if (label === 'css' || label === 'scss' || label === 'less') return new cssWorker()
-      if (label === 'html' || label === 'handlebars' || label === 'razor') return new htmlWorker()
-      if (label === 'typescript' || label === 'javascript') return new typescriptWorker()
-      return new editorWorker()
+  if (typeof self !== 'undefined') {
+    self.MonacoEnvironment = {
+      getWorker(_moduleId, label) {
+        if (label === 'json') return new jsonWorker()
+        if (label === 'css' || label === 'scss' || label === 'less') return new cssWorker()
+        if (label === 'html' || label === 'handlebars' || label === 'razor') return new htmlWorker()
+        if (label === 'typescript' || label === 'javascript') return new typescriptWorker()
+        return new editorWorker()
+      }
     }
   }
+</script>
 
-  let container
-  let editor
-  let loading = true
-  let loadError = ''
-  let changingInternally = false
+<script>
+  import { onMount } from 'svelte'
+  import * as monaco from 'monaco-editor'
+
+  let { value = $bindable(''), language = 'html', readOnly = false, onmount, onchange } = $props()
+
+  let container = $state()
+  let editor = $state.raw()
+  let loading = $state(true)
+  let loadError = $state('')
 
   onMount(() => {
     let disposed = false
@@ -58,19 +59,17 @@
       })
 
       contentListener = editor.onDidChangeModelContent(() => {
-        changingInternally = true
         value = editor.getValue()
-        dispatch('change', value)
-        changingInternally = false
+        onchange?.(value)
       })
       document.fonts?.load('14px "Fira Code"').then(() => {
         if (!disposed) monaco.editor.remeasureFonts()
       })
       loading = false
-      dispatch('mount', { editor, monaco })
+      onmount?.({ editor, monaco })
     } catch (error) {
       loading = false
-      loadError = error.message
+      loadError = error instanceof Error ? error.message : String(error)
     }
 
     return () => {
@@ -81,15 +80,19 @@
     }
   })
 
-  $: if (editor && !changingInternally && editor.getValue() !== value) {
-    editor.setValue(value)
-  }
+  $effect(() => {
+    if (editor && editor.getValue() !== value) editor.setValue(value)
+  })
 
-  $: if (editor && editor.getModel()?.getLanguageId() !== language) {
-    monaco.editor.setModelLanguage(editor.getModel(), language)
-  }
+  $effect(() => {
+    if (editor && editor.getModel()?.getLanguageId() !== language) {
+      monaco.editor.setModelLanguage(editor.getModel(), language)
+    }
+  })
 
-  $: if (editor) editor.updateOptions({ readOnly })
+  $effect(() => {
+    editor?.updateOptions({ readOnly })
+  })
 </script>
 
 <div class="editor-shell" class:read-only={readOnly} aria-disabled={readOnly}>

@@ -1,16 +1,15 @@
 <script>
   import { getReasonPhrase } from 'http-status-codes'
 
-  export let status = 200
-  let reason
+  let { status = $bindable(200) } = $props()
 
-  $: {
+  let reason = $derived.by(() => {
     try {
-      reason = getReasonPhrase(status)
+      return getReasonPhrase(status)
     } catch {
-      reason = 'Unknown status'
+      return 'Unknown status'
     }
-  }
+  })
 
   function update(event) {
     const value = event.currentTarget.valueAsNumber
@@ -25,7 +24,7 @@
 <label class="status-field">
   <span class="label">Status</span>
   <span class="status-control">
-    <input type="number" min="100" max="699" value={status} on:input={update} on:blur={normalize} />
+    <input type="number" min="100" max="699" value={status} oninput={update} onblur={normalize} />
     <span class="reason">{reason}</span>
   </span>
 </label>

@@ -11,36 +11,48 @@
   import Icon from './Icon.svelte'
   import StatusField from './StatusField.svelte'
 
-  export let headers
-  export let status
+  let { headers = $bindable(), status = $bindable() } = $props()
 
-  $: corsEnabled = hasCORS(headers)
+  let corsEnabled = $derived(hasCORS(headers))
   let nextRowId = 1
-  let rows = [...Array.from(headers, (values) => createRow(values)), createRow()]
-  let lastHeaders = headers
-  let tableBody
+  let rows = $state([...Array.from(headers, (values) => createRow(values)), createRow()])
 
-  $: syncExternalHeaders(headers)
+  $effect(() => syncExternalHeaders(headers))
 
-  function createRow(values = ['', ''], id = nextRowId++) {
-    return { id, values: [...values] }
+  function createRow(values = ['', ''], id = nextRowId++, inputs = []) {
+    return { id, values: [...values], inputs }
+  }
+
+  function headersFromRows(sourceRows) {
+    return sourceRows.filter((row) => row.values[0].trim()).map((row) => [...row.values])
+  }
+
+  function headersEqual(left, right) {
+    return (
+      left.length === right.length &&
+      left.every(
+        ([name, value], index) => name === right[index][0] && value === right[index][1]
+      )
+    )
   }
 
   function syncExternalHeaders(nextHeaders) {
-    if (nextHeaders === lastHeaders) return
+    if (headersEqual(nextHeaders, headersFromRows(rows))) return
+
     const draft = rows.at(-1) ?? createRow()
     const nextRows = Array.from(nextHeaders, (values, index) =>
-      createRow(values, index < rows.length - 1 ? rows[index].id : undefined)
+      createRow(
+        values,
+        index < rows.length - 1 ? rows[index].id : undefined,
+        index < rows.length - 1 ? rows[index].inputs : undefined
+      )
     )
     rows = [...nextRows, draft.values[0].trim() ? createRow() : draft]
-    lastHeaders = nextHeaders
   }
 
   function publish(nextRows) {
     rows = nextRows
-    const nextHeaders = nextRows.filter((row) => row.values[0].trim()).map((row) => [...row.values])
-    lastHeaders = nextHeaders
-    headers = nextHeaders
+    headers = headersFromRows(nextRows)
   }
 
   function updateRow(index, field, value) {
@@ -81,12 +93,14 @@
     updateRow(index, field, value)
     await tick()
 
-    const inputs = tableBody?.querySelectorAll('.header-row input') ?? []
-    inputs[index * 2 + field + 1]?.focus()
+    const nextInput = field === 0 ? rows[index]?.inputs[1] : rows[index + 1]?.inputs[0]
+    nextInput?.focus()
   }
 
   function toggleCors() {
-    let next = Array.from(headers, (values, index) => createRow(values, rows[index]?.id))
+    let next = Array.from(headers, (values, index) =>
+      createRow(values, rows[index]?.id, rows[index]?.inputs)
+    )
     if (corsEnabled) {
       next = next.filter((row) => !Object.hasOwn(CORS_HEADERS, row.values[0]))
     } else {
@@ -109,7 +123,7 @@
       class="cors-button"
       type="button"
       aria-pressed={corsEnabled}
-      on:click={toggleCors}
+      onclick={toggleCors}
     >
       {#if corsEnabled}<Icon name="check" size={14} />{/if}
       CORS
@@ -120,13 +134,14 @@
     <div class="table-head" aria-hidden="true">
       <span>Name</span><span>Value</span><span></span>
     </div>
-    <div class="table-body" bind:this={tableBody}>
+    <div class="table-body">
       {#each rows as row, index (row.id)}
         {@const valueExample = getHttpHeaderExample(row.values[0])}
         {@const valueSuggestions = getHttpHeaderValues(row.values[0])}
         {@const isInputRow = index === rows.length - 1}
         <div class="header-row">
           <input
+            bind:this={row.inputs[0]}
             class="header-name-input"
             class:last-row={isInputRow}
             style:grid-row={index + 1}
@@ -134,11 +149,12 @@
             list="header-names"
             placeholder={isInputRow ? 'Add header…' : 'Header name'}
             value={row.values[0]}
-            on:input={(event) => updateRow(index, 0, event.currentTarget.value)}
-            on:keydown={(event) => acceptDatalistAndAdvance(event, index, 0)}
-            on:blur={cleanRows}
+            oninput={(event) => updateRow(index, 0, event.currentTarget.value)}
+            onkeydown={(event) => acceptDatalistAndAdvance(event, index, 0)}
+            onblur={cleanRows}
           />
           <input
+            bind:this={row.inputs[1]}
             class="header-value-input"
             class:last-row={isInputRow}
             style:grid-row={index + 1}
@@ -146,9 +162,9 @@
             list={valueSuggestions.length ? `header-values-${index}` : undefined}
             placeholder={valueExample || 'Value'}
             value={row.values[1]}
-            on:input={(event) => updateRow(index, 1, event.currentTarget.value)}
-            on:keydown={(event) => acceptDatalistAndAdvance(event, index, 1)}
-            on:blur={cleanRows}
+            oninput={(event) => updateRow(index, 1, event.currentTarget.value)}
+            onkeydown={(event) => acceptDatalistAndAdvance(event, index, 1)}
+            onblur={cleanRows}
           />
           {#if valueSuggestions.length}
             <datalist id={`header-values-${index}`}>
@@ -186,7 +202,7 @@
               type="button"
               title="Remove header"
               aria-label={`Remove ${row.values[0] || 'header'}`}
-              on:click={() => removeRow(index)}
+              onclick={() => removeRow(index)}
             >
               <Icon name="trash" size={15} />
             </button>

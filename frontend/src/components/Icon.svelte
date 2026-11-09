@@ -1,6 +1,5 @@
 <script>
-  export let name
-  export let size = 18
+  let { name, size = 18 } = $props()
 </script>
 
 <svg
