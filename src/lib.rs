@@ -112,4 +112,24 @@ mod tests {
             assert_eq!(response, StatusCode::BAD_REQUEST);
         }
     }
+
+    #[tokio::test]
+    async fn inferred_content_type_uses_default_charset() {
+        for (path, expected) in [
+            ("/payload.html?body=test", "text/html; charset=utf-8"),
+            ("/payload.xml?body=test", "text/xml; charset=utf-8"),
+            ("/app.config?body=test", "application/xml; charset=utf-8"),
+            ("/payload.json?body=test", "application/json"),
+            ("/image.svg?body=test", "image/svg+xml"),
+        ] {
+            let request = Request::builder()
+                .uri(path)
+                .body(axum::body::Body::empty())
+                .unwrap();
+
+            let response = index(request).await.unwrap();
+
+            assert_eq!(response.headers().get("content-type").unwrap(), expected);
+        }
+    }
 }

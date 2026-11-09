@@ -61,7 +61,7 @@
           padding: { top: 14, bottom: 14 },
           fontSize: 14,
           lineHeight: 22,
-          fontFamily: "'SFMono-Regular', Consolas, 'Liberation Mono', monospace",
+          fontFamily: "'Fira Code', 'SFMono-Regular', Consolas, 'Liberation Mono', monospace",
           smoothScrolling: true,
           scrollBeyondLastLine: false,
           renderLineHighlight: 'gutter',
@@ -74,6 +74,9 @@
           value = editor.getValue()
           dispatch('change', value)
           changingInternally = false
+        })
+        document.fonts?.load('14px "Fira Code"').then(() => {
+          if (!disposed) monaco.editor.remeasureFonts()
         })
         loading = false
         dispatch('mount', { editor, monaco })

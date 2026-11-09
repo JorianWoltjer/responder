@@ -333,6 +333,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "generate-mime-map"
+version = "0.1.0"
+dependencies = [
+ "mime_guess",
+]
+
+[[package]]
 name = "getrandom"
 version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"

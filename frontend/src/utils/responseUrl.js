@@ -1,6 +1,5 @@
-import mime from 'mime'
-
 import { CORS_HEADERS, HEADER_ALIAS, hasCORS } from './index.js'
+import { getContentTypeForPath } from './mimeTypes.js'
 
 export function encodeQueryComponent(value) {
   const bytes = new TextEncoder().encode(value)
@@ -43,8 +42,7 @@ export function buildResponsePath({
     if (!name.trim()) continue
 
     if (name.toLowerCase() === 'content-type') {
-      const extension = filename.split('.').pop()
-      if (extension && mime.getType(extension) === value) continue
+      if (getContentTypeForPath(filename) === value) continue
     }
 
     name = HEADER_ALIAS[name.toLowerCase()] ?? name

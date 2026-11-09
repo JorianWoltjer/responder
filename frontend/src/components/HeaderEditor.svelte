@@ -49,16 +49,15 @@
     publish(rows.filter((_, rowIndex) => rowIndex !== index))
   }
 
-  function focusNextHeaderName(event) {
-    if (event.key !== 'Tab' || event.shiftKey) return
+  function openDatalist(event) {
+    const input = event.currentTarget
+    if (!input.list || typeof input.showPicker !== 'function') return
 
-    const nextNameInput = event.currentTarget
-      .closest('.header-row')
-      ?.nextElementSibling?.querySelector('input')
-    if (!nextNameInput) return
-
-    event.preventDefault()
-    nextNameInput.focus()
+    try {
+      input.showPicker()
+    } catch {
+      // Some browsers require a user activation or do not support datalist pickers.
+    }
   }
 
   function toggleCors() {
@@ -98,26 +97,32 @@
     </div>
     <div class="table-body">
       {#each rows as row, index (index)}
-        {@const docsUrl = getHttpHeaderDocsUrl(row[0])}
         {@const valueExample = getHttpHeaderExample(row[0])}
         {@const valueSuggestions = getHttpHeaderValues(row[0])}
         {@const isInputRow = index === rows.length - 1}
         <div class="header-row">
           <input
+            class="header-name-input"
+            class:last-row={isInputRow}
+            style:grid-row={index + 1}
             aria-label={`Header ${index + 1} name`}
             list="header-names"
             placeholder={isInputRow ? 'Add header…' : 'Header name'}
             value={row[0]}
             on:input={(event) => updateRow(index, 0, event.currentTarget.value)}
+            on:focus={openDatalist}
             on:blur={cleanRows}
           />
           <input
+            class="header-value-input"
+            class:last-row={isInputRow}
+            style:grid-row={index + 1}
             aria-label={`Header ${index + 1} value`}
             list={valueSuggestions.length ? `header-values-${index}` : undefined}
             placeholder={valueExample || 'Value'}
             value={row[1]}
             on:input={(event) => updateRow(index, 1, event.currentTarget.value)}
-            on:keydown={focusNextHeaderName}
+            on:focus={openDatalist}
             on:blur={cleanRows}
           />
           {#if valueSuggestions.length}
@@ -127,31 +132,40 @@
               {/each}
             </datalist>
           {/if}
-          <div class="row-actions">
-            {#if docsUrl}
-              <a
-                class="docs-link"
-                href={docsUrl}
-                target="_blank"
-                rel="noreferrer"
-                title="Read documentation on MDN"
-                aria-label={`Read ${row[0]} documentation on MDN`}
-              >
-                <Icon name="book" size={16} />
-              </a>
-            {/if}
-            {#if !isInputRow}
-              <button
-                class="remove-button"
-                type="button"
-                title="Remove header"
-                aria-label={`Remove ${row[0] || 'header'}`}
-                on:click={() => removeRow(index)}
-              >
-                <Icon name="trash" size={15} />
-              </button>
-            {/if}
-          </div>
+        </div>
+      {/each}
+      {#each rows as row, index (index)}
+        {@const docsUrl = getHttpHeaderDocsUrl(row[0])}
+        {@const isInputRow = index === rows.length - 1}
+        <div
+          class="row-actions"
+          class:last-row={isInputRow}
+          style:grid-row={index + 1}
+          style:grid-column="3"
+        >
+          {#if docsUrl}
+            <a
+              class="docs-link"
+              href={docsUrl}
+              target="_blank"
+              rel="noreferrer"
+              title="Read documentation on MDN"
+              aria-label={`Read ${row[0]} documentation on MDN`}
+            >
+              <Icon name="book" size={16} />
+            </a>
+          {/if}
+          {#if !isInputRow}
+            <button
+              class="remove-button"
+              type="button"
+              title="Remove header"
+              aria-label={`Remove ${row[0] || 'header'}`}
+              on:click={() => removeRow(index)}
+            >
+              <Icon name="trash" size={15} />
+            </button>
+          {/if}
         </div>
       {/each}
     </div>
@@ -222,9 +236,13 @@
   }
 
   .table-head,
-  .header-row {
+  .table-body {
     display: grid;
     grid-template-columns: minmax(8rem, 0.9fr) minmax(8rem, 1.1fr) 4.5rem;
+  }
+
+  .header-row {
+    display: contents;
   }
 
   .table-head {
@@ -242,12 +260,12 @@
     padding: 0.7rem 0.85rem;
   }
 
-  .header-row {
-    border-bottom: 1px solid var(--border);
+  .header-name-input {
+    grid-column: 1;
   }
 
-  .header-row:last-child {
-    border-bottom: 0;
+  .header-value-input {
+    grid-column: 2;
   }
 
   .header-row input {
@@ -256,6 +274,7 @@
     padding: 0.75rem 0.85rem;
     border: 0;
     border-right: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
     border-radius: 0;
     color: var(--text);
     background: transparent;
@@ -273,6 +292,13 @@
     display: flex;
     justify-content: flex-end;
     min-width: 0;
+    min-height: 3.15rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .header-row input.last-row,
+  .row-actions.last-row {
+    border-bottom: 0;
   }
 
   .docs-link,
@@ -305,7 +331,7 @@
 
   @media (max-width: 480px) {
     .table-head,
-    .header-row {
+    .table-body {
       grid-template-columns: minmax(7rem, 0.9fr) minmax(7rem, 1.1fr) 4.5rem;
     }
   }

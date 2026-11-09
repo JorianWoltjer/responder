@@ -1,5 +1,6 @@
 import { extract } from 'emmet'
 import { expandAbbreviation } from 'emmet-monaco-es'
+import { XHTML_NAMESPACE, xmlNamespaceAt } from './svgComplete.js'
 
 // Emmet's SVG profile: https://docs.emmet.io/cheat-sheet/
 const SVG_SNIPPETS = {
@@ -130,6 +131,23 @@ function expandSnippet(abbreviation, syntax) {
   }
 }
 
+function htmlEmmetExpansion(abbreviation) {
+  try {
+    return expandAbbreviation(abbreviation, {
+      type: 'markup',
+      syntax: 'html',
+      options: { 'output.field': field }
+    })
+  } catch {
+    return undefined
+  }
+}
+
+export function xhtmlEmmetExpansion(text, offset, abbreviation, { language = 'xml' } = {}) {
+  if (language !== 'xml' || xmlNamespaceAt(text, offset) !== XHTML_NAMESPACE) return
+  return htmlEmmetExpansion(abbreviation)
+}
+
 export function svgEmmetExpansions(abbreviation, { syntax = 'html', insideSvg = false } = {}) {
   const names = elementNames(abbreviation)
   if (!names.length) return []
@@ -195,6 +213,35 @@ function provideSvgCompletions(monaco, model, position, language) {
   const line = model.getLineContent(position.lineNumber)
   const extracted = extract(line, position.column - 1)
   if (!extracted?.abbreviation) return
+
+  const before = model.getValueInRange({
+    startLineNumber: 1,
+    startColumn: 1,
+    endLineNumber: position.lineNumber,
+    endColumn: position.column
+  })
+  const xhtmlExpansion = xhtmlEmmetExpansion(before, before.length, extracted.abbreviation, {
+    language
+  })
+  if (xhtmlExpansion) {
+    return {
+      suggestions: [
+        {
+          label: extracted.abbreviation,
+          kind: monaco.languages.CompletionItemKind.Snippet,
+          insertText: xhtmlExpansion,
+          insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+          range: new monaco.Range(
+            position.lineNumber,
+            extracted.location + 1,
+            position.lineNumber,
+            extracted.location + extracted.abbreviation.length + 1
+          ),
+          detail: 'Emmet abbreviation'
+        }
+      ]
+    }
+  }
 
   const syntax = language === 'xml' ? 'xml' : 'html'
   const expansions = svgEmmetExpansions(extracted.abbreviation, {

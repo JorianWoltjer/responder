@@ -10,7 +10,7 @@ test('builds a compact response URL', () => {
     status: 302,
     delay: 250,
     headers: new Map([
-      ['Content-Type', 'text/html'],
+      ['Content-Type', 'text/html; charset=utf-8'],
       ['Location', 'https://example.com/next']
     ])
   })
@@ -52,4 +52,39 @@ test('keeps custom content types and an explicit empty response query', () => {
     '/payload.txt?h[ct]=application%2Foctet%2Dstream'
   )
   assert.equal(buildResponsePath({ body: '', headers: new Map() }), '/?')
+})
+
+test('only omits content types inferred identically by mime_guess', () => {
+  assert.equal(
+    buildResponsePath({
+      body: 'xml',
+      filename: 'payload.xml',
+      headers: new Map([['Content-Type', 'text/xml; charset=utf-8']])
+    }),
+    '/payload.xml?body=xml'
+  )
+  assert.equal(
+    buildResponsePath({
+      body: 'xml',
+      filename: 'payload.xml',
+      headers: new Map([['Content-Type', 'text/xml']])
+    }),
+    '/payload.xml?body=xml&h[ct]=text%2Fxml'
+  )
+  assert.equal(
+    buildResponsePath({
+      body: 'xml',
+      filename: 'app.config',
+      headers: new Map([['Content-Type', 'application/xml; charset=utf-8']])
+    }),
+    '/app.config?body=xml'
+  )
+  assert.equal(
+    buildResponsePath({
+      body: 'json',
+      filename: 'json',
+      headers: new Map([['Content-Type', 'application/json']])
+    }),
+    '/json?body=json&h[ct]=application%2Fjson'
+  )
 })

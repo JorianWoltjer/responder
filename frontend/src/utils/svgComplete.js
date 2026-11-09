@@ -1,5 +1,7 @@
 import svgData from '../../data/svg-completion.js'
 
+export const XHTML_NAMESPACE = 'http://www.w3.org/1999/xhtml'
+
 const basedElements = new Set(svgData.based)
 const ELEMENT_BY_LOWER = new Map(
   Object.keys(svgData.elements).map((name) => [name.toLowerCase(), name])
@@ -19,6 +21,93 @@ function inSvg(before) {
 
 function startsWith(name, prefix) {
   return name.toLowerCase().startsWith(prefix.toLowerCase())
+}
+
+function tagEnd(text, start, limit = text.length) {
+  let quote = ''
+  let bracketDepth = 0
+  for (let i = start + 1; i < limit; i++) {
+    const char = text[i]
+    if (quote) {
+      if (char === quote) quote = ''
+      continue
+    }
+    if (char === '"' || char === "'") {
+      quote = char
+      continue
+    }
+    if (char === '[') bracketDepth++
+    else if (char === ']' && bracketDepth) bracketDepth--
+    else if (char === '>' && !bracketDepth) return i
+  }
+  return -1
+}
+
+function withNamespaceDeclarations(namespaces, tag) {
+  const result = new Map(namespaces)
+  const declarations = /(?:^|\s)xmlns(?::([A-Za-z_][\w.-]*))?\s*=\s*(?:"([^"]*)"|'([^']*)')/g
+  for (const match of tag.matchAll(declarations)) {
+    result.set(match[1] ?? '', match[2] ?? match[3])
+  }
+  return result
+}
+
+function namespaceForName(name, namespaces) {
+  const colon = name.indexOf(':')
+  return namespaces.get(colon < 0 ? '' : name.slice(0, colon))
+}
+
+function xmlStackBefore(text) {
+  const stack = []
+  let index = 0
+
+  while ((index = text.indexOf('<', index)) >= 0) {
+    if (text.startsWith('<!--', index)) {
+      const end = text.indexOf('-->', index + 4)
+      if (end < 0) break
+      index = end + 3
+      continue
+    }
+    if (text.startsWith('<![CDATA[', index)) {
+      const end = text.indexOf(']]>', index + 9)
+      if (end < 0) break
+      index = end + 3
+      continue
+    }
+
+    const end = tagEnd(text, index)
+    if (end < 0) break
+    const source = text.slice(index, end + 1)
+    const closing = source.match(/^<\s*\/\s*([:\w.-]+)/)
+    if (closing) {
+      const openIndex = stack.findLastIndex((entry) => entry.name === closing[1])
+      if (openIndex >= 0) stack.length = openIndex
+      index = end + 1
+      continue
+    }
+
+    const opening = source.match(/^<\s*([:\w.-]+)/)
+    if (opening && !source.startsWith('<!') && !source.startsWith('<?')) {
+      const inherited = stack.at(-1)?.namespaces ?? new Map()
+      const namespaces = withNamespaceDeclarations(inherited, source)
+      if (!/\/\s*>$/.test(source)) stack.push({ name: opening[1], namespaces })
+    }
+    index = end + 1
+  }
+
+  return stack
+}
+
+function xmlNamespaceContext(context, text, offset) {
+  const inherited = xmlStackBefore(context.before).at(-1)?.namespaces ?? new Map()
+  const currentTag = text.slice(context.before.length, offset)
+  const namespaces = withNamespaceDeclarations(inherited, currentTag)
+  return namespaceForName(context.tag, namespaces)
+}
+
+export function xmlNamespaceAt(text, offset = text.length) {
+  const current = xmlStackBefore(text.slice(0, offset)).at(-1)
+  return current ? namespaceForName(current.name, current.namespaces) : undefined
 }
 
 export function svgTagContext(text, offset) {
@@ -116,6 +205,10 @@ function valueNames(tag, attr) {
 export function svgAutocompleteItems(text, offset, { language = 'html' } = {}) {
   const context = svgTagContext(text, offset)
   if (!context) return []
+
+  if (language === 'xml') {
+    if (xmlNamespaceContext(context, text, offset) === XHTML_NAMESPACE) return []
+  }
 
   const inside = inSvg(context.before)
   if (context.kind === 'tag') {

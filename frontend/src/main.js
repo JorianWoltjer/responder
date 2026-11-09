@@ -1,4 +1,3 @@
-import '@fontsource-variable/inter/wght.css'
 import './assets/main.css'
 
 import { mount } from 'svelte'

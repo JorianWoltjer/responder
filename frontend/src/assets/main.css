@@ -17,8 +17,8 @@
   --radius: 3px;
   --radius-sm: 3px;
   --shadow: none;
-  --font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
-  font-family: 'Inter Variable', 'Inter', system-ui, sans-serif;
+  --font-mono: 'Fira Code', 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+  font-family: 'Inter', system-ui, sans-serif;
   font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
   font-synthesis: none;
 }

@@ -2,13 +2,12 @@
   import { onDestroy, onMount } from 'svelte'
   import { emmetCSS, emmetHTML } from 'emmet-monaco-es'
   import { useMonacoEx } from 'monaco-editor-ex'
-  import mime from 'mime'
-
   import HeaderEditor from '@/components/HeaderEditor.svelte'
   import Icon from '@/components/Icon.svelte'
   import MonacoEditor from '@/components/MonacoEditor.svelte'
   import { SNIPPETS } from '@/utils'
   import { buildCsrfFormHtml, parseRequest } from '@/utils/csrfPoc'
+  import { getContentTypeForExtension } from '@/utils/mimeTypes'
   import { buildResponsePath } from '@/utils/responseUrl'
   import { registerSvgAutocomplete } from '@/utils/svgComplete'
   import { registerSvgEmmet } from '@/utils/svgEmmet'
@@ -187,11 +186,10 @@
       ? filename.replace(/\.[^./]+$/, `.${extension}`)
       : `${filename || 'poc'}.${extension}`
 
-    const contentType = mime.getType(extension)
+    const contentType = getContentTypeForExtension(extension)
     if (contentType) {
       headers = new Map(headers)
-      const supportsCharset = contentType.startsWith('text/') || contentType === 'application/xml'
-      headers.set('Content-Type', supportsCharset ? `${contentType}; charset=utf-8` : contentType)
+      headers.set('Content-Type', contentType)
     }
   }
 
@@ -229,6 +227,19 @@
     }
   }
 
+  function handleCsrfKeydown(event) {
+    if (
+      (!event.ctrlKey && !event.metaKey) ||
+      event.altKey ||
+      event.shiftKey ||
+      event.key !== 'Enter'
+    )
+      return
+
+    event.preventDefault()
+    if (!event.repeat) generateCsrfPoC()
+  }
+
   function showToast(title, detail, type = 'info', life = 5000) {
     const id = nextToastId++
     toasts = [...toasts, { id, title, detail, type }]
@@ -245,6 +256,20 @@
 
   function handleInteraction() {
     dirty = true
+  }
+
+  function handleKeydown(event) {
+    handleInteraction()
+    if (
+      (!event.ctrlKey && !event.metaKey) ||
+      event.altKey ||
+      event.shiftKey ||
+      event.key.toLowerCase() !== 'p'
+    )
+      return
+
+    event.preventDefault()
+    if (!event.repeat) setPanel('preview')
   }
 
   function handleBeforeUnload(event) {
@@ -264,7 +289,7 @@
   })
 </script>
 
-<svelte:window on:input={handleInteraction} on:keydown={handleInteraction} />
+<svelte:window on:input={handleInteraction} on:keydown|capture={handleKeydown} />
 
 <div class="app-shell">
   <header class="site-header">
@@ -299,6 +324,8 @@
             placeholder={csrfRequestPlaceholder}
             spellcheck="false"
             aria-label="Raw HTTP request"
+            aria-keyshortcuts="Control+Enter Meta+Enter"
+            on:keydown={handleCsrfKeydown}
           ></textarea>
         </div>
       {/if}
@@ -330,6 +357,7 @@
               class:quiet={!csrfGenerateDirty}
               type="button"
               on:click={generateCsrfPoC}
+              title="Generate CSRF PoC (Ctrl+Enter)"
             >
               <Icon name="wand" size={15} />
               <span>Generate</span>
@@ -340,8 +368,9 @@
             class:active={activePanel === 'preview'}
             type="button"
             on:click={() => setPanel('preview')}
-            title="Toggle live preview"
+            title="Toggle live preview (Ctrl+P)"
             aria-label="Toggle live preview"
+            aria-keyshortcuts="Control+P Meta+P"
             aria-pressed={activePanel === 'preview'}
           >
             <Icon name={activePanel === 'preview' ? 'eye' : 'eye-off'} size={17} />
@@ -670,14 +699,12 @@
   .preview-panel {
     display: grid;
     grid-template-rows: 1fr;
-    background: white;
   }
 
   iframe {
     width: 100%;
     height: 100%;
     border: 0;
-    background: white;
   }
 
   .csrf-panel {
@@ -709,6 +736,7 @@
 
   .input-prefix-wrap {
     position: relative;
+    min-width: 0;
   }
 
   .input-prefix {
@@ -722,6 +750,7 @@
   }
 
   .input-prefix-wrap input {
+    min-width: 0;
     width: 100%;
     padding: 0.52rem 0.65rem 0.52rem 1.25rem;
     font-family: var(--font-mono);
@@ -1310,11 +1339,6 @@
       height: 1.65rem;
     }
 
-    .editor-card {
-      height: calc(100dvh - 5.5rem);
-      min-height: 30rem;
-    }
-
     .editor-bar {
       padding: 0;
     }
@@ -1325,6 +1349,7 @@
 
     .language-select {
       min-width: 9rem;
+      margin-right: 0;
     }
 
     .tool-button.text-button {
@@ -1340,14 +1365,6 @@
     .delivery {
       padding-right: 0;
       padding-left: 0;
-    }
-
-    .delivery-options {
-      grid-template-columns: 1fr;
-    }
-
-    .compact-field {
-      grid-template-columns: 3.5rem minmax(0, 1fr);
     }
   }
 
