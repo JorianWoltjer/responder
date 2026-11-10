@@ -218,7 +218,8 @@
     overflow: hidden;
     min-width: 0;
     height: calc(100vh - 7.5rem);
-    min-height: 40rem;
+    height: calc(100dvh - 7.5rem);
+    min-height: 34rem;
     grid-template-rows: minmax(0, 1fr) auto;
     border: 1px solid var(--border-strong);
   }
@@ -285,6 +286,7 @@
     .editor-card {
       width: 100%;
       height: 70vh;
+      height: 70dvh;
       min-height: 34rem;
     }
   }

@@ -234,7 +234,6 @@
     <aside class="config-card" aria-label="Response configuration">
       <div class="config-content">
         <HeaderEditor bind:headers bind:status {bodyLength} />
-        <div class="config-spacer" aria-hidden="true"></div>
       </div>
 
       <ResponseDelivery
@@ -257,6 +256,7 @@
   .app-shell {
     width: 100%;
     min-height: 100vh;
+    min-height: 100dvh;
     margin: 0 auto;
     padding: 0 2rem 2rem;
   }
@@ -308,14 +308,16 @@
     grid-template-columns: minmax(0, 1fr) minmax(28rem, 1fr);
     gap: 2rem;
     min-height: calc(100vh - 7.5rem);
+    min-height: calc(100dvh - 7.5rem);
   }
 
   .config-card {
     display: flex;
-    overflow-y: auto;
+    overflow: hidden;
     min-width: 0;
     height: calc(100vh - 7.5rem);
-    min-height: 40rem;
+    height: calc(100dvh - 7.5rem);
+    min-height: 34rem;
     flex-direction: column;
     padding-left: 2rem;
     border-left: 1px solid var(--border);
@@ -323,16 +325,10 @@
 
   .config-content {
     display: flex;
-    overflow-y: auto;
+    overflow: hidden;
     flex: 1;
     min-height: 0;
     flex-direction: column;
-  }
-
-  .config-spacer {
-    flex: 1;
-    min-height: 1.5rem;
-    user-select: none;
   }
 
   @media (max-width: 980px) {
@@ -352,6 +348,10 @@
       min-height: 0;
       padding: 0;
       border-left: 0;
+    }
+
+    .config-content {
+      overflow: visible;
     }
   }
 

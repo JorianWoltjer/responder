@@ -230,7 +230,10 @@
 
 <style>
   .headers-section {
+    display: flex;
+    flex: 1;
     min-height: 0;
+    flex-direction: column;
   }
 
   .section-heading {
@@ -289,7 +292,9 @@
   }
 
   .header-table {
-    overflow: hidden;
+    overflow-y: auto;
+    flex: 0 1 auto;
+    min-height: 0;
     border: 1px solid var(--border);
     border-radius: 0;
     background: var(--surface-inset);
@@ -306,10 +311,15 @@
   }
 
   .table-head {
+    position: sticky;
+    z-index: 1;
+    top: 0;
     padding: 0 0.05rem;
     border-bottom: 1px solid var(--border);
     color: var(--text-subtle);
-    background: rgba(255, 255, 255, 0.018);
+    background:
+      linear-gradient(rgba(255, 255, 255, 0.018), rgba(255, 255, 255, 0.018)),
+      var(--surface-inset);
     font-size: 0.78rem;
     font-weight: 650;
     letter-spacing: 0.06em;
@@ -399,6 +409,16 @@
     .table-head,
     .table-body {
       grid-template-columns: minmax(7rem, 0.9fr) minmax(7rem, 1.1fr) 4.5rem;
+    }
+  }
+
+  @media (max-width: 980px) {
+    .headers-section {
+      flex: none;
+    }
+
+    .header-table {
+      overflow-y: hidden;
     }
   }
 </style>

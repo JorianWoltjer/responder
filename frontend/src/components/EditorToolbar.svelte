@@ -231,6 +231,7 @@
     .syntax-select::picker(select) {
       min-width: 13.5rem;
       max-height: min(22rem, 60vh);
+      max-height: min(22rem, 60dvh);
       margin-block: 0.4rem;
       padding: 0.35rem;
       border: 1px solid var(--border-strong);
