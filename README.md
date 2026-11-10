@@ -17,7 +17,7 @@ With Responder, you have a super quick **web UI** that generates a permanent URL
 * **Status code**: Use the `?status=` parameter to set the [response status code](https://developer.mozilla.org/en-US/docs/Web/HTTP/Status)
 * **Delayed responses**: Use the `?delay=` parameter to delay the response server-side (maximum 5 minutes). Values are in milliseconds by default; suffix `s` means seconds and `m` means minutes (e.g. `?delay=0.2s`, `?delay=1m`).
 * **Gist fetching**: For large bodies that won't fit in a URL, you can [create a gist](https://gist.github.com/) and put its URL in the `?gist=` parameter. Responder revalidates cached content with GitHub on every request, so changes are available immediately. Revision URLs such as `https://gist.github.com/user/id/revisions/revision` are supported when the response must stay pinned to a specific version.
-* **Keyboard shortcuts**: <kbd>Ctrl</kbd> + <kbd>Enter</kbd> to submit, <kbd>Ctrl</kbd> + <kbd>P</kbd> toggles the preview, <kbd>Ctrl</kbd> + <kbd>S</kbd> formats the editor, <kbd>Ctrl</kbd> + <kbd>Space</kbd> lists [snippets](./frontend/src/utils/snippets.js), and <kbd>Enter</kbd> for accepting suggestions.
+* **Keyboard shortcuts**: <kbd>Ctrl</kbd> + <kbd>Enter</kbd> to submit, <kbd>Ctrl</kbd> + <kbd>P</kbd> toggles the preview, <kbd>Ctrl</kbd> + <kbd>S</kbd> formats the editor, <kbd>Ctrl</kbd> + <kbd>Space</kbd> lists [snippets](./frontend/src/utils/snippets.js), and <kbd>Enter</kbd> for accepting suggestions. Paste into the final URL input to load settings from an existing URL.
 
 ## FAQ
 

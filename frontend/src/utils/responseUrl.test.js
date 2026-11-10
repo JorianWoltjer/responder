@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { buildResponsePath, encodeQueryComponent } from './responseUrl.js'
+import { buildResponsePath, encodeQueryComponent, parseResponseUrl } from './responseUrl.js'
 
 test('builds a compact response URL', () => {
   const path = buildResponsePath({
@@ -129,4 +129,81 @@ test('only omits content types inferred identically by mime_guess', () => {
     }),
     '/json?body=json&h[ct]=application%2Fjson'
   )
+})
+
+test('parses a generated response URL into UI configuration', () => {
+  assert.deepEqual(
+    parseResponseUrl(
+      '/folder/poc.html?body=%3Ch1%3EHello%3C%2Fh1%3E&status=302&delay=250&h[ct]=text%2Fhtml&h[c]=a%3D1&h[c]=b%3D2'
+    ),
+    {
+      filename: 'folder/poc.html',
+      body: '<h1>Hello</h1>',
+      gist: undefined,
+      status: 302,
+      delay: 250,
+      headers: [
+        ['Content-Type', 'text/html'],
+        ['Set-Cookie', 'a=1'],
+        ['Set-Cookie', 'b=2']
+      ]
+    }
+  )
+})
+
+test('parses the canonical parameters emitted by the frontend', () => {
+  assert.deepEqual(
+    parseResponseUrl(
+      'https://r.example/payload.txt?body=Hello%2C%20world%21&status=201&delay=250&h[x-test]=yes&h[access-control-allow-origin]=https%3A%2F%2Fexample.com&cors=true'
+    ),
+    {
+      filename: 'payload.txt',
+      body: 'Hello, world!',
+      gist: undefined,
+      status: 201,
+      delay: 250,
+      headers: [
+        ['Access-Control-Allow-Origin', '*'],
+        ['Access-Control-Allow-Methods', '*'],
+        ['Access-Control-Allow-Headers', '*'],
+        ['x-test', 'yes']
+      ]
+    }
+  )
+})
+
+test('selects gist mode only when no inline body parameter takes precedence', () => {
+  assert.deepEqual(parseResponseUrl('/payload?gist=https%3A%2F%2Fgist.github.com%2Fu%2Fid'), {
+    filename: 'payload',
+    body: '',
+    gist: 'https://gist.github.com/u/id',
+    status: 200,
+    delay: 0,
+    headers: []
+  })
+
+  const inline = parseResponseUrl('/payload?gist=ignored&body=inline')
+  assert.equal(inline.body, 'inline')
+  assert.equal(inline.gist, undefined)
+})
+
+test('ignores backend-only parameter variants', () => {
+  assert.deepEqual(
+    parseResponseUrl('/payload?s=201&b=body&body.b64=SGVsbG8%3D&headers[x-test]=yes&cors'),
+    {
+      filename: 'payload',
+      body: '',
+      gist: undefined,
+      status: 200,
+      delay: 0,
+      headers: []
+    }
+  )
+})
+
+test('rejects values outside the frontend controls', () => {
+  assert.throws(() => parseResponseUrl('/?status=nope'), /whole number/)
+  assert.throws(() => parseResponseUrl('/?status=700'), /between 100 and 699/)
+  assert.throws(() => parseResponseUrl('/?delay=1s'), /invalid/)
+  assert.throws(() => parseResponseUrl('/?delay=300001'), /5 minutes/)
 })

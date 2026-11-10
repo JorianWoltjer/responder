@@ -2,7 +2,16 @@
   import { onDestroy } from 'svelte'
   import Icon from './Icon.svelte'
 
-  let { filename, delay = $bindable(0), url, onfilename, onopen, onusegist, ontoast } = $props()
+  let {
+    filename,
+    delay = $bindable(0),
+    url,
+    onfilename,
+    onopen,
+    onpasteurl,
+    onusegist,
+    ontoast
+  } = $props()
 
   let copied = $state(false)
   let copiedTimer
@@ -13,6 +22,14 @@
 
   function selectUrl(event) {
     event.currentTarget.select()
+  }
+
+  function pasteUrl(event) {
+    const pastedUrl = event.clipboardData?.getData('text/plain').trim()
+    if (!pastedUrl) return
+
+    event.preventDefault()
+    onpasteurl?.(pastedUrl)
   }
 
   async function copyUrl() {
@@ -63,7 +80,14 @@
     </label>
   </div>
   <div class="url-box">
-    <input value={url} readonly aria-label="Generated response URL" onfocus={selectUrl} />
+    <input
+      value={url}
+      readonly
+      aria-label="Generated response URL"
+      title="Paste a response URL to load it"
+      onfocus={selectUrl}
+      onpaste={pasteUrl}
+    />
     <button type="button" onclick={copyUrl} title="Copy full URL" aria-label="Copy full URL">
       <Icon name={copied ? 'check' : 'copy'} size={17} />
     </button>

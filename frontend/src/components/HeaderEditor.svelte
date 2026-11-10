@@ -110,7 +110,10 @@
     if (corsEnabled) {
       next = next.filter((row) => !Object.hasOwn(CORS_HEADERS, row.values[0]))
     } else {
-      next.push(...Object.entries(CORS_HEADERS).map((values) => createRow(values)))
+      next = [
+        ...Object.entries(CORS_HEADERS).map((values) => createRow(values)),
+        ...next
+      ]
     }
     const draft = rows.at(-1) ?? createRow()
     publish([...next, draft])

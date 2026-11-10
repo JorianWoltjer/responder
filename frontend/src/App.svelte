@@ -6,7 +6,7 @@
   import ResponseDelivery from '@/components/ResponseDelivery.svelte'
   import ToastRegion from '@/components/ToastRegion.svelte'
   import { getContentTypeForExtension, getContentTypeForPath } from '@/utils/mimeTypes'
-  import { buildResponsePath } from '@/utils/responseUrl'
+  import { buildResponsePath, parseResponseUrl } from '@/utils/responseUrl'
 
   const LANGUAGE_EXTENSIONS = {
     javascript: 'js',
@@ -99,6 +99,52 @@
 
   function openResponse() {
     window.open(url, '_blank', 'noopener')
+  }
+
+  function languageForResponse(filenameValue, responseHeaders) {
+    const contentType = responseHeaders
+      .find(([name]) => name.trim().toLowerCase() === 'content-type')?.[1]
+      ?.split(';', 1)[0]
+      .trim()
+      .toLowerCase()
+    const extension = filenameValue.split('/').at(-1)?.split('.').at(-1)?.toLowerCase()
+
+    if (contentType === 'text/html' || extension === 'html' || extension === 'htm') return 'html'
+    if (
+      contentType === 'text/javascript' ||
+      contentType === 'application/javascript' ||
+      ['js', 'mjs', 'cjs'].includes(extension)
+    )
+      return 'javascript'
+    if (contentType === 'application/json' || contentType?.endsWith('+json') || extension === 'json')
+      return 'json'
+    if (
+      contentType === 'application/xml' ||
+      contentType === 'text/xml' ||
+      contentType === 'image/svg+xml' ||
+      contentType?.endsWith('+xml') ||
+      ['xml', 'svg'].includes(extension)
+    )
+      return 'xml'
+    if (contentType === 'text/css' || extension === 'css') return 'css'
+    return 'plain'
+  }
+
+  function loadResponseUrl(value) {
+    try {
+      const response = parseResponseUrl(value, responseOrigin)
+      code = response.body
+      gistUrl = response.gist ?? ''
+      filename = response.filename
+      status = response.status
+      delay = response.delay
+      headers = response.headers
+      language = languageForResponse(filename, headers)
+      activePanel = response.gist === undefined ? null : 'gist'
+      showToast('Response URL loaded', 'The editor now reflects the pasted URL.', 'success', 3000)
+    } catch (error) {
+      showToast('Could not load response URL', error.message, 'warning', 5000)
+    }
   }
 
   function showToast(title, detail, type = 'info', life = 5000) {
@@ -197,6 +243,7 @@
         {url}
         onfilename={setFilename}
         onopen={openResponse}
+        onpasteurl={loadResponseUrl}
         onusegist={() => (activePanel = 'gist')}
         ontoast={showToast}
       />
